@@ -1,0 +1,39 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+fix = true
+
+exclude = [
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+select = [
+    "I",   # import order
+    "Q",   # quotes
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "N",   # naming
+    "E731", # do not assign a lambda expression, use a def
+]
+ignore = [
+    "Q000",  # ignore cases with unnecessary escapes
+]
+
+fixable = [
+    "I",
+    "Q001",
+    "Q002",
+    "F401",
+    "F841",
+    "W293",
+]
+
+[tool.ruff.format]
+quote-style = "single"

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coloring Tracker</title>
+    <style>
+        :root {
+            --bg-color: #f4f9fd;
+            --card-bg: #ffffff;
+            --text-color: #20354a;
+            --muted-color: #7890a1;
+            --primary-color: #56a6d4;
+            --border-color: #e1edf4;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: Inter, system-ui, -apple-system, sans-serif;
+            background: linear-gradient(145deg, #edf8ff, #f9fbff);
+            color: var(--text-color);
+            margin: 0;
+            padding: 40px 20px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            max-width: 480px;
+            width: 100%;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 36px 28px;
+            box-shadow: 0 10px 32px rgba(77, 146, 187, 0.1);
+            text-align: center;
+        }
+        .badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1.4px;
+            color: #74a9c9;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        h1 {
+            font-size: 28px;
+            margin: 0 0 12px;
+            letter-spacing: -0.8px;
+        }
+        p {
+            color: var(--muted-color);
+            font-size: 15px;
+            line-height: 1.5;
+            margin: 0 0 28px;
+        }
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 14px 20px;
+            border-radius: 14px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: opacity 0.2s ease;
+            font-size: 15px;
+        }
+        .btn-primary {
+            background: var(--primary-color);
+            color: #ffffff;
+        }
+        .btn-primary:hover {
+            opacity: 0.92;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="badge">Сервис трекинга</span>
+        <h1>Coloring Tracker</h1>
+        <p>Telegram WebApp трекер раскрасок для учёта выполненных работ, ведения коллекции книг и отслеживания личной статистики.</p>
+        <div class="actions">
+            <a href="/admin/" class="btn btn-primary">Панель администратора</a>
+        </div>
+    </div>
+</body>
+</html>

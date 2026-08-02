@@ -1,0 +1,12 @@
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { api } from '../api'
+
+const router = useRouter(), month = ref(new Date().toISOString().slice(0, 7)), report = ref(null)
+async function load() { report.value = await api('/api/tracker/report/?month=' + month.value) }
+const calendar = computed(() => { if (!report.value) return []; const [y, m] = month.value.split('-').map(Number), first = new Date(y, m - 1, 1).getDay() || 7, days = new Date(y, m, 0).getDate(); return Array.from({ length: first - 1 + days }, (_, i) => i < first - 1 ? null : i - first + 2) })
+function dateLabel(value) { return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' }).format(new Date(`${value}T12:00:00`)) }
+onMounted(load)
+</script>
+<template><section class="page"><header><button class="back" aria-label="Назад" @click="router.back()"><svg viewBox="0 0 24 24" fill="none"><path d="m14.5 5-7 7 7 7"/></svg></button><div><p class="eyebrow">СТАТИСТИКА</p><h1>Отчёт за месяц</h1></div><input class="month-picker" type="month" v-model="month" @change="load"></header><div v-if="report" class="report-card"><div class="report-total"><b>{{ report.total }}</b><span>страниц раскрашено</span></div><div class="chips"><span>🌷 {{ report.active_days }} активных дней</span><span>✨ Лучший день: {{ report.best_day }}</span><span>📚 {{ Object.keys(report.books).length }} книг</span></div><h3>Активность</h3><div class="week"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div><div class="calendar"><i v-for="(day,i) in calendar" :key="i" :class="{'empty-day':!day,level:(report.days[day]||0)}">{{day}}</i></div></div><section v-if="report?.entries?.length" class="report-card activity-list"><h2>Что раскрашено</h2><transition-group name="activity" tag="div"><article v-for="day in report.entries" :key="day.date" class="activity-day"><time>{{ dateLabel(day.date) }}</time><div v-for="work in day.works" :key="work.book + work.page" class="activity-work"><span class="work-mark">{{ work.photo ? '▣' : '✓' }}</span><b>{{ work.book }}</b><small>Страница {{ work.page }}</small></div></article></transition-group></section><div v-else-if="report" class="empty compact-empty"><div>❀</div><h2>Пока нет работ</h2><p>Когда вы отметите страницу готовой, она появится здесь.</p></div></section></template>

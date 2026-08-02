@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+env/
+venv/
+
+# JavaScript dependencies and build output are created inside Docker.
+frontend_webapp/node_modules/
+frontend_webapp/dist/
+
+# IDE stuff
+.idea/
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# Local data
+data/
+*.sqlite3
+*.sqlite
+*.db
+
+# Other
+.DS_Store
+*.cache

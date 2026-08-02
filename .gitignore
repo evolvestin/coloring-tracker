@@ -1,0 +1,10 @@
+.env
+/data/
+__pycache__/
+.venv/
+*.py[cod]
+/.idea/
+/.pnpm-store/
+/frontend_webapp/node_modules/
+/frontend_webapp/dist/
+/legacy_kinopub/
