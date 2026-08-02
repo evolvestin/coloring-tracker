@@ -40,7 +40,12 @@ services:
         condition: service_healthy
 
   frontend:
-    image: node:20-alpine
+    # Building this target makes `docker compose up --build` recreate Vite
+    # whenever frontend source changes. Without it the long-running dev server
+    # can retain an outdated module graph despite the bind mount being current.
+    build:
+      context: .
+      target: frontend
     working_dir: /app/frontend_webapp
     restart: unless-stopped
     command: sh -c "npm ci && exec npm run dev -- --host 0.0.0.0"

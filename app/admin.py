@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from app.models import ColoringBook, ColoringPage, ColoringWork, TrackerUser, UserBook
+from app.models import (
+    ColoringBook,
+    ColoringColorCode,
+    ColoringPage,
+    ColoringPagePhoto,
+    ColoringWork,
+    TrackerUser,
+    UserBook,
+)
 
 
 class ColoringPageInline(admin.TabularInline):
@@ -11,7 +19,7 @@ class ColoringPageInline(admin.TabularInline):
 
 @admin.register(ColoringBook)
 class ColoringBookAdmin(admin.ModelAdmin):
-    list_display = ('title', 'author', 'publisher', 'is_published', 'work_count')
+    list_display = ('title', 'report_icon', 'author', 'publisher', 'is_published', 'work_count')
     list_filter = ('is_published',)
     search_fields = ('title', 'author', 'publisher')
     inlines = (ColoringPageInline,)
@@ -29,12 +37,23 @@ class UserBookAdmin(admin.ModelAdmin):
 
 @admin.register(ColoringWork)
 class ColoringWorkAdmin(admin.ModelAdmin):
-    list_display = ('user_book', 'page', 'completed_at', 'has_photo')
+    list_display = ('user_book', 'page', 'completed_at')
     list_filter = ('completed_at', 'user_book__book')
+    fields = ('user_book', 'page', 'completed_at', 'note')
 
-    @admin.display(boolean=True, description='Фото')
-    def has_photo(self, work):
-        return bool(work.photo)
+
+@admin.register(ColoringPagePhoto)
+class ColoringPagePhotoAdmin(admin.ModelAdmin):
+    list_display = ('user_book', 'page', 'created_at')
+    list_filter = ('user_book__book',)
+    fields = ('user_book', 'page', 'image')
+
+
+@admin.register(ColoringColorCode)
+class ColoringColorCodeAdmin(admin.ModelAdmin):
+    list_display = ('user_book', 'page', 'created_at')
+    list_filter = ('user_book__book',)
+    fields = ('user_book', 'page', 'image')
 
 
 @admin.register(TrackerUser)
@@ -47,4 +66,3 @@ class TrackerUserAdmin(admin.ModelAdmin):
         if not user.webapp_viewport_width or not user.webapp_viewport_height:
             return '—'
         return f'{user.webapp_viewport_width} × {user.webapp_viewport_height}'
-

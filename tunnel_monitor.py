@@ -8,9 +8,7 @@ import docker
 
 # Only accept an actual Tunnelmole forwarding line, not the example URL printed
 # by `tmole --help` if the tunnel command ever fails to start.
-URL_PATTERN = re.compile(
-    r'https://[a-zA-Z0-9-]+\.(?:trycloudflare\.com|tunnelmole\.net)(?=\s+⟶)'
-)
+URL_PATTERN = re.compile(r'https://[a-zA-Z0-9-]+\.(?:trycloudflare\.com|tunnelmole\.net)(?=\s+⟶)')
 OUTPUT = Path('/app/data/tunnel_url.txt')
 
 

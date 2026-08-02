@@ -10,11 +10,21 @@ from urllib.parse import parse_qsl
 from django.conf import settings
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.clickjacking import xframe_options_sameorigin
 
-from app.models import ColoringBook, ColoringPage, ColoringWork, TrackerUser, UserBook
+from app.models import (
+    ColoringBook,
+    ColoringColorCode,
+    ColoringPage,
+    ColoringPagePhoto,
+    ColoringWork,
+    TrackerUser,
+    UserBook,
+)
+
+REPORT_LAUNCH_DATE = date(2026, 8, 1)
 
 
 def media_url(request, field, updated_at=None):
@@ -57,7 +67,11 @@ def local_preview_telegram_id(request):
 def local_preview(request, telegram_id):
     """A local-only frame that recreates a saved Telegram WebApp viewport."""
     is_local_dev = settings.DEBUG or os.getenv('VITE_DEV_MODE', 'False').lower() == 'true'
-    if not is_local_dev or request.get_host().split(':', 1)[0].lower() not in {'localhost', '127.0.0.1', '::1'}:
+    if not is_local_dev or request.get_host().split(':', 1)[0].lower() not in {
+        'localhost',
+        '127.0.0.1',
+        '::1',
+    }:
         raise Http404
     user = get_object_or_404(TrackerUser, telegram_id=telegram_id)
     viewport = None
@@ -70,7 +84,11 @@ def local_preview(request, telegram_id):
 def local_preview_webapp(request, telegram_id):
     """Serve the actual WebApp only inside the local preview frame."""
     is_local_dev = settings.DEBUG or os.getenv('VITE_DEV_MODE', 'False').lower() == 'true'
-    if not is_local_dev or request.get_host().split(':', 1)[0].lower() not in {'localhost', '127.0.0.1', '::1'}:
+    if not is_local_dev or request.get_host().split(':', 1)[0].lower() not in {
+        'localhost',
+        '127.0.0.1',
+        '::1',
+    }:
         raise Http404
     get_object_or_404(TrackerUser, telegram_id=telegram_id)
     return webapp_index(request)
@@ -179,7 +197,9 @@ def tracker_books(request):
         try:
             payload = json.loads(request.body or '{}')
         except json.JSONDecodeError:
-            return JsonResponse({'error': 'Ожидается JSON с идентификатором книги.'}, status=400)
+            return JsonResponse(
+                {'error': 'Ожидается JSON с идентификатором раскраски.'}, status=400
+            )
         book = get_object_or_404(ColoringBook, pk=payload.get('book_id'), is_published=True)
         user_book, _ = UserBook.objects.get_or_create(book=book, user=user)
         return JsonResponse({'book': book_data(user_book)}, status=201)
@@ -214,6 +234,36 @@ def tracker_catalog(request):
                 }
                 for book in catalogue
             ]
+        }
+    )
+
+
+@require_http_methods(['GET'])
+def tracker_catalog_book_detail(request, book_id):
+    """Published catalogue entry preview, available before it is collected."""
+    book = get_object_or_404(
+        ColoringBook.objects.prefetch_related('pages'), pk=book_id, is_published=True
+    )
+    return JsonResponse(
+        {
+            'book': {
+                'id': book.id,
+                'title': book.title,
+                'author': book.author,
+                'publisher': book.publisher,
+                'description': book.description,
+                'cover': book.cover.url if book.cover else '',
+                'pages': book.pages.count(),
+            },
+            'pages': [
+                {
+                    'id': page.id,
+                    'label': page.label,
+                    'spread_end': page.spread_end,
+                    'title': page.title,
+                }
+                for page in book.pages.all()
+            ],
         }
     )
 
@@ -260,6 +310,8 @@ def tracker_profile(request):
 def tracker_book_detail(request, user_book_id):
     user_book = get_object_or_404(user_books(request), pk=user_book_id)
     works_by_page = {work.page_id: work for work in user_book.works.all()}
+    photos_by_page = {photo.page_id: photo for photo in user_book.page_photos.all()}
+    color_codes_by_page = {code.page_id: code for code in user_book.color_codes.all()}
     pages = [
         {
             'id': page.id,
@@ -268,9 +320,14 @@ def tracker_book_detail(request, user_book_id):
             'label': page.label,
             'completed': page.id in works_by_page,
             'photo': media_url(
-                request, works_by_page[page.id].photo, works_by_page[page.id].updated_at
+                request, photos_by_page[page.id].image, photos_by_page[page.id].updated_at
             )
-            if page.id in works_by_page and works_by_page[page.id].photo
+            if page.id in photos_by_page
+            else '',
+            'color_code': media_url(
+                request, color_codes_by_page[page.id].image, color_codes_by_page[page.id].updated_at
+            )
+            if page.id in color_codes_by_page
             else '',
         }
         for page in user_book.book.pages.all()
@@ -288,22 +345,82 @@ def tracker_work(request, user_book_id, page_id):
         return JsonResponse({'ok': True})
     work, _ = ColoringWork.objects.get_or_create(user_book=user_book, page=page)
     if photo := request.FILES.get('photo'):
-        work.photo = photo
-        work.save(update_fields=('photo', 'updated_at'))
-    return JsonResponse({'id': work.id, 'photo': media_url(request, work.photo, work.updated_at)})
+        page_photo, _ = ColoringPagePhoto.objects.get_or_create(user_book=user_book, page=page)
+        page_photo.image = photo
+        page_photo.save()
+    page_photo = ColoringPagePhoto.objects.filter(user_book=user_book, page=page).first()
+    return JsonResponse(
+        {
+            'id': work.id,
+            'photo': media_url(request, page_photo.image, page_photo.updated_at)
+            if page_photo
+            else '',
+        }
+    )
+
+
+@csrf_exempt
+@require_http_methods(['POST', 'DELETE'])
+def tracker_color_code(request, user_book_id, page_id):
+    user_book = get_object_or_404(user_books(request), pk=user_book_id)
+    page = get_object_or_404(ColoringPage, pk=page_id, book=user_book.book)
+    color_code = ColoringColorCode.objects.filter(user_book=user_book, page=page).first()
+    if request.method == 'DELETE':
+        if color_code:
+            color_code.delete()
+        return JsonResponse({'ok': True})
+    image = request.FILES.get('image')
+    if not image:
+        return JsonResponse({'error': 'Выберите изображение цветового кода.'}, status=400)
+    if color_code:
+        color_code.image = image
+        color_code.save(update_fields=('image', 'updated_at'))
+    else:
+        color_code = ColoringColorCode.objects.create(user_book=user_book, page=page, image=image)
+    return JsonResponse(
+        {
+            'id': color_code.id,
+            'image': media_url(request, color_code.image, color_code.updated_at),
+        }
+    )
 
 
 @require_http_methods(['GET'])
 def tracker_month_report(request):
+    available_months = sorted(
+        {
+            work.completed_at.strftime('%Y-%m')
+            for work in ColoringWork.objects.filter(
+                user_book__in=user_books(request), completed_at__gte=REPORT_LAUNCH_DATE
+            ).only('completed_at')
+        },
+        reverse=True,
+    )
+    requested_month = request.GET.get('month')
+    if not available_months:
+        return JsonResponse({'months': [], 'entries': []})
+    if not requested_month:
+        requested_month = available_months[0]
+    if requested_month not in available_months:
+        return JsonResponse({'error': 'Этот месяц недоступен в отчёте'}, status=400)
     try:
-        year, month = map(int, request.GET.get('month', date.today().strftime('%Y-%m')).split('-'))
+        year, month = map(int, requested_month.split('-'))
         first_day = date(year, month, 1)
         last_day = date(year, month, monthrange(year, month)[1])
     except ValueError:
         return JsonResponse({'error': 'Ожидается месяц в формате ГГГГ-ММ'}, status=400)
-    works = ColoringWork.objects.filter(
-        user_book__in=user_books(request), completed_at__range=(first_day, last_day)
-    ).select_related('user_book__book', 'page').order_by('-completed_at', '-created_at')
+    works = (
+        ColoringWork.objects.filter(
+            user_book__in=user_books(request), completed_at__range=(first_day, last_day)
+        )
+        .select_related('user_book__book', 'page')
+        .order_by('-completed_at', '-created_at')
+    )
+    photo_pages = set(
+        ColoringPagePhoto.objects.filter(user_book__in=user_books(request)).values_list(
+            'user_book_id', 'page_id'
+        )
+    )
     daily, books, entries_by_day = defaultdict(int), defaultdict(int), defaultdict(list)
     for work in works:
         daily[work.completed_at.day] += 1
@@ -312,12 +429,14 @@ def tracker_month_report(request):
             {
                 'book': work.user_book.book.title,
                 'page': work.page.label,
-                'photo': bool(work.photo),
+                'photo': (work.user_book_id, work.page_id) in photo_pages,
+                'icon': work.user_book.book.report_icon,
             }
         )
     return JsonResponse(
         {
             'month': first_day.strftime('%Y-%m'),
+            'months': available_months,
             'total': works.count(),
             'active_days': len(daily),
             'best_day': max(daily.values(), default=0),
