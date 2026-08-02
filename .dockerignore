@@ -9,7 +9,7 @@ __pycache__/
 env/
 venv/
 
-# JavaScript dependencies and build output are created inside Docker.
+# JavaScript dependencies and build output
 frontend_webapp/node_modules/
 frontend_webapp/dist/
 

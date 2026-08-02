@@ -8,8 +8,8 @@
     <title>Трекер раскрасок</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     {% if vite_dev_mode %}
-      {% if vite_hmr_enabled %}<script type="module" src="/__vite__/@vite/client"></script>{% endif %}
-      <script type="module" src="/__vite__/src/main.js"></script>
+      <script type="module" src="{{ vite_dev_server_url }}/@vite/client"></script>
+      <script type="module" src="{{ vite_dev_server_url }}/src/main.js"></script>
     {% else %}
       {% vite_asset 'src/main.js' %}
     {% endif %}

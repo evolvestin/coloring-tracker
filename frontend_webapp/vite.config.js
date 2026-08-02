@@ -5,39 +5,15 @@ import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-const isTunnel = process.env.WEBAPP_PUBLIC_URL && process.env.WEBAPP_PUBLIC_URL.startsWith('https://')
-
-const hmrProtocol = process.env.VITE_HMR_PROTOCOL || (isTunnel ? 'wss' : 'ws')
-const hmrPort = process.env.VITE_HMR_PORT ? parseInt(process.env.VITE_HMR_PORT) : (isTunnel ? 443 : 5173)
-const hmrPath = process.env.VITE_HMR_PATH || 'hmr'
-const hmrEnabled = process.env.VITE_HMR_ENABLED !== 'false'
-
 export default defineConfig({
   plugins: [vue()],
   root: __dirname,
-  base: '/__vite__/', 
   server: {
-    host: '0.0.0.0',
+    host: 'localhost',
     port: 5173,
     strictPort: true,
     cors: true,
     allowedHosts: true,
-    watch: {
-      usePolling: true,
-    },
-    // Tunnelmole forwards HTTP assets but does not upgrade Vite's WebSocket.
-    // Disable HMR for the public Telegram URL to prevent its reconnect loop
-    // from reloading the WebApp. Local development can keep HMR enabled.
-    hmr: hmrEnabled ? {
-      protocol: hmrProtocol,
-      clientPort: hmrPort,
-      path: `/${hmrPath.replace(/^\//, '')}`,
-    } : false,
-    fs: {
-      allow: [
-        '/app',
-      ],
-    },
   },
   build: {
     outDir: resolve(__dirname, 'dist'),

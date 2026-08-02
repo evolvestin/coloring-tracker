@@ -31,21 +31,21 @@ def media_url(request, field, updated_at=None):
     """Return a same-origin, cache-busted media URL for the WebApp."""
     if not field:
         return ''
-    # Keep this relative: it must use the HTTPS tunnel/Caddy origin, never the
-    # internal Django container host received by a reverse proxy.
+    # Keep this relative so media always use the current WebApp origin.
     url = field.url
     return f'{url}?v={int(updated_at.timestamp())}' if updated_at else url
 
 
 def webapp_index(request):
     vite_dev_mode = os.getenv('VITE_DEV_MODE', 'False').lower() == 'true'
-    vite_hmr_enabled = os.getenv('VITE_HMR_ENABLED', 'true').lower() != 'false'
     return render(
         request,
         'webapp/coloring.html',
         {
             'vite_dev_mode': vite_dev_mode,
-            'vite_hmr_enabled': vite_hmr_enabled,
+            'vite_dev_server_url': os.getenv('VITE_DEV_SERVER_URL', 'http://localhost:5173').rstrip(
+                '/'
+            ),
             'local_preview_telegram_id': local_preview_telegram_id(request),
         },
     )
@@ -145,7 +145,7 @@ def tracker_identity(request):
 
 def telegram_webapp_user(init_data):
     """Validate Telegram WebApp init data before trusting its user id."""
-    token = os.getenv('TELEGRAM_BOT_TOKEN') or os.getenv('BOT_TOKEN', '')
+    token = os.getenv('TELEGRAM_BOT_TOKEN')
     fields = dict(parse_qsl(init_data, keep_blank_values=True))
     received_hash = fields.pop('hash', '')
     if not token or not received_hash:

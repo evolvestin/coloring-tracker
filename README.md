@@ -1,29 +1,25 @@
 # Coloring Tracker
 
-Мобильный веб‑трекер раскрасок на Django + Vue 3.
+Мобильный трекер раскрасок на Django и Vue 3. Django хранит каталог и данные,
+Vue отвечает за WebApp-интерфейс.
 
-## Что уже есть
+## Локальная разработка в контейнерах
 
-- каталог раскрасок, который редактирует только администратор Django;
-- личная коллекция книг пользователя: Telegram WebApp безопасно связывает её с Telegram ID; вне Telegram используется сессия браузера;
-- сетка страниц, загрузка фотографии готовой работы и снятие отметки;
-- развороты: одна запись страницы с полем «Последняя страница разворота» — это одна работа и одна карточка в сетке;
-- месячный отчёт с активными днями, лучшим днём и разбивкой по книгам;
-- поиск по каталогу, избранные раскраски и профиль с личной статистикой;
-- Docker Compose с PostgreSQL, Redis, Django/Gunicorn и Celery worker.
+1. Скопируйте `.env.example` в `.env`. Для открытия приложения в Telegram
+   задайте `TELEGRAM_WEBAPP_URL` — URL опубликованного WebApp.
+2. Запустите сервисы: `docker compose up --build`.
 
-## Первый запуск
+Для просмотра интерфейса в браузере откройте `http://localhost:8022/<telegram_id>/`.
+Это локальный iframe-предпросмотр с сохранёнными размерами WebApp и без
+публикации локального сервера в интернет.
 
-1. Скопируйте `.env.example` в `.env` и укажите `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DJANGO_SECRET_KEY` и `TELEGRAM_BOT_TOKEN`.
-2. Создайте первую миграцию: `python manage.py makemigrations app`.
-3. Запустите сервисы: `docker compose --profile tunnel up --build`. Compose поднимает Django, Vite dev server с HMR, PostgreSQL, Redis, Celery, Telegram-бот и Tunnelmole. Туннель публикует HTTPS URL в `data/tunnel_url.txt`; бот использует его автоматически.
-4. Создайте администратора: `docker compose exec web python manage.py createsuperuser`.
-5. В `/admin/` добавьте раскраску и её страницы. Для разворота укажите первую и последнюю страницы в одной строке.
+Compose запускает PostgreSQL, Redis, Django, Vite, Celery и Telegram-бота.
+Порты Django и Vite доступны только с `localhost`; reverse proxy,
+туннелирование и связанные с ними сервисы отсутствуют.
 
 ## Структура
 
 - `coloring_tracker/` — конфигурация Django;
-- `app/` — чистый домен трекера и API;
+- `app/` — доменная модель, admin и JSON API;
 - `frontend_webapp/` — Vue-интерфейс;
-- `legacy_kinopub/` — изолированный архив донорского проекта. Он не подключён к приложению и не участвует в сборке;
-- `data/` — автоматически создаваемые PostgreSQL-совместимые медиа и собранная статика при первом запуске.
+- `tracker_bot/` — бот, открывающий опубликованный WebApp;
