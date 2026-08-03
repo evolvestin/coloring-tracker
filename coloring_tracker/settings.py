@@ -8,6 +8,13 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'unsafe-development-key')
 DEBUG = os.getenv('DJANGO_DEBUG', 'false').lower() == 'true'
 ALLOWED_HOSTS = ['*']
+
+csrf_origins_env = os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS', '')
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in csrf_origins_env.split(',') if origin.strip()
+]
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 TIME_ZONE = 'Europe/Minsk'
 LANGUAGE_CODE = 'ru'
 USE_TZ = True
