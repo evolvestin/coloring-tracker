@@ -8,3 +8,4 @@ __pycache__/
 /frontend_webapp/node_modules/
 /frontend_webapp/dist/
 /legacy_kinopub/
+/pdf_to_jpg/

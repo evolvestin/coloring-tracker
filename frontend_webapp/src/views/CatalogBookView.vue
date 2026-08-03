@@ -11,6 +11,10 @@ async function add() {
   adding.value = true
   try {
     await api('/api/tracker/books/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ book_id: route.params.id }) })
+    await Promise.all([
+      useTrackerStore().loadCatalog('', true),
+      useTrackerStore().loadCollection(true),
+    ])
     router.push('/')
   } finally { adding.value = false }
 }

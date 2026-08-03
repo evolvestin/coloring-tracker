@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useTrackerStore } from './stores/tracker'
 
 const router = useRouter()
 const route = useRoute()
+const trackerStore = useTrackerStore()
 const hasInitData = !!window.Telegram?.WebApp?.initData
 const isDevBypass = new URLSearchParams(window.location.search).get('dev') === 'true'
 const isLocalPreview = new URLSearchParams(window.location.search).has('local_preview')
@@ -14,6 +16,9 @@ onMounted(() => {
   if (hasInitData) {
     window.Telegram?.WebApp?.ready()
     window.Telegram?.WebApp?.expand()
+  }
+  if (isTelegram) {
+    trackerStore.preloadAll()
   }
 })
 </script>

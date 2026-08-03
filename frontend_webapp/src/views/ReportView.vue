@@ -2,28 +2,24 @@
 import '../report.css'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api } from '../api'
+import { useTrackerStore } from '../stores/tracker'
 import { formatCount } from '../pluralize'
 
 const router = useRouter()
 const route = useRoute()
+const store = useTrackerStore()
+
 const month = ref(route.query.month || '')
-const report = ref(null)
 const monthPickerOpen = ref(false)
 const monthPicker = ref(null)
 
+const report = computed(() => store.report)
+const loading = computed(() => store.reportLoading && !store.reportLoaded)
+
 async function load() {
-  const query = month.value ? `?month=${encodeURIComponent(month.value)}` : ''
-  try {
-    report.value = await api(`/api/tracker/report/${query}`)
-  } catch (error) {
-    // A stale URL must not leave the report unusable after a month disappears.
-    if (!month.value) throw error
-    month.value = ''
-    report.value = await api('/api/tracker/report/')
-  }
-  if (report.value.month) {
-    month.value = report.value.month
+  await store.loadReport(month.value, true)
+  if (store.report?.month) {
+    month.value = store.report.month
     if (route.query.month !== month.value) router.replace({ query: { ...route.query, month: month.value } })
   }
 }
@@ -83,8 +79,15 @@ const calendar = computed(() => {
 function capitalize(value) { return value ? value[0].toUpperCase() + value.slice(1) : value }
 function dateLabel(value) { return capitalize(new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', weekday: 'long' }).format(new Date(`${value}T12:00:00`))) }
 function monthLabel(value) { return capitalize(new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date(`${value}-01T12:00:00`))) }
+
 onMounted(() => {
-  load()
+  if (month.value) {
+    load()
+  } else {
+    store.loadReport().then(() => {
+      if (store.report?.month) month.value = store.report.month
+    })
+  }
   document.addEventListener('pointerdown', closeMonthPicker)
 })
 onBeforeUnmount(() => document.removeEventListener('pointerdown', closeMonthPicker))
@@ -106,7 +109,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeMonthPick
       </div>
     </header>
 
-    <template v-if="report?.month">
+    <p v-if="loading && !report" class="muted">Загружаем отчёт…</p>
+    <template v-else-if="report?.month">
       <div class="report-card">
         <div class="report-total"><b>{{ report.total }}</b><span>Раскрашено {{ formatCount(report.total, 'page') }}</span></div>
         <div class="chips"><span>🌷 {{ formatCount(report.active_days, 'day') }} активности</span><span>✨ Лучший день: {{ formatCount(report.best_day, 'work') }}</span><span>📚 {{ formatCount(Object.keys(report.books).length, 'book') }}</span></div>
@@ -130,6 +134,6 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeMonthPick
         </div>
       </section>
     </template>
-    <div v-else-if="report" class="empty compact-empty"><div>❀</div><h2>Пока нет работ</h2><p>Первый отчёт появится после завершённой раскраски.</p></div>
+    <div v-else-if="!loading && report" class="empty compact-empty"><div>❀</div><h2>Пока нет работ</h2><p>Первый отчёт появится после завершённой раскраски.</p></div>
   </section>
 </template>

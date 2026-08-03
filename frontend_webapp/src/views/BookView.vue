@@ -57,7 +57,11 @@ async function toggle(page) {
   uploading.value = 'completion'
   try {
     await api(`/api/tracker/books/${route.params.id}/pages/${page.id}/`, { method: page.completed ? 'DELETE' : 'POST', body: page.completed ? undefined : new FormData() })
-    await load()
+    await Promise.all([
+      load(),
+      useTrackerStore().loadCollection(true),
+      useTrackerStore().loadReport('', true),
+    ])
   } finally { uploading.value = '' }
 }
 function openViewer(src, title) {

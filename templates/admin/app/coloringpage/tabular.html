@@ -1,0 +1,399 @@
+{% include "admin/edit_inline/tabular.html" %}
+
+<style>
+.coloring-pages-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.coloring-pages-toolbar label {
+  font-weight: 600;
+  color: #334155;
+  font-size: 13px;
+}
+
+.coloring-pages-toolbar .custom-add-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+}
+
+.coloring-pages-toolbar .custom-add-group input {
+  width: 75px;
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.coloring-pages-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.coloring-pages-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.coloring-pages-btn.primary {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+.coloring-pages-btn.primary:hover {
+  background: #1d4ed8;
+}
+
+.coloring-pages-btn.renumber-btn {
+  margin-left: auto;
+}
+
+.coloring-pages-btn.merge-btn {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #ffedd5;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.coloring-pages-btn.merge-btn:hover {
+  background: #ffedd5;
+  border-color: #fed7aa;
+}
+
+.coloring-pages-btn.unmerge-btn {
+  background: #f0fdf4;
+  color: #15803d;
+  border-color: #dcfce7;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.coloring-pages-btn.unmerge-btn:hover {
+  background: #dcfce7;
+}
+
+.field-actions-cell {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  function initColoringBookAdmin() {
+    const inlineGroup = document.querySelector('#pages-group');
+    if (!inlineGroup) return;
+
+    createToolbar(inlineGroup);
+    updateTableActions();
+
+    inlineGroup.addEventListener('input', function (e) {
+      if (e.target.matches('input[id$="-number"], input[id$="-spread_end"]')) {
+        updateTableActions();
+      }
+    });
+    inlineGroup.addEventListener('change', function (e) {
+      if (e.target.matches('input[id$="-number"], input[id$="-spread_end"], input[id$="-DELETE"]')) {
+        updateTableActions();
+      }
+    });
+
+    if (window.django && window.django.jQuery) {
+      window.django.jQuery(document).on('formset:added formset:removed', function () {
+        updateTableActions();
+      });
+    }
+  }
+
+  function createToolbar(inlineGroup) {
+    if (inlineGroup.querySelector('.coloring-pages-toolbar')) return;
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'coloring-pages-toolbar';
+    toolbar.innerHTML = `
+      <label>Быстрое добавление страниц:</label>
+      <button type="button" class="coloring-pages-btn primary" data-action="add-50">50 страниц</button>
+      <button type="button" class="coloring-pages-btn primary" data-action="add-100">100 страниц</button>
+      <div class="custom-add-group">
+        <input type="number" id="custom-pages-count" placeholder="Кол-во" min="1" max="500">
+        <button type="button" class="coloring-pages-btn" data-action="add-custom">Добавить</button>
+      </div>
+      <button type="button" class="coloring-pages-btn renumber-btn" data-action="renumber">Пронумеровать 1..N</button>
+    `;
+
+    const table = inlineGroup.querySelector('table') || inlineGroup.querySelector('.tabular');
+    if (table) {
+      table.parentNode.insertBefore(toolbar, table);
+    } else {
+      inlineGroup.appendChild(toolbar);
+    }
+
+    toolbar.addEventListener('click', function (e) {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      e.preventDefault();
+
+      const action = btn.getAttribute('data-action');
+      if (action === 'add-50') {
+        addPages(50);
+      } else if (action === 'add-100') {
+        addPages(100);
+      } else if (action === 'add-custom') {
+        const input = document.getElementById('custom-pages-count');
+        const count = parseInt(input ? input.value : '0', 10);
+        if (count > 0) {
+          addPages(count);
+          if (input) input.value = '';
+        }
+      } else if (action === 'renumber') {
+        renumberPages();
+      }
+    });
+  }
+
+  function getVisibleRows() {
+    const rows = Array.from(document.querySelectorAll('#pages-group tbody tr.form-row:not(.empty-form)'));
+    return rows.filter(row => {
+      const delInput = row.querySelector('input[id$="-DELETE"]');
+      if (delInput && delInput.checked) return false;
+      if (row.style.display === 'none') return false;
+      return true;
+    });
+  }
+
+  function addPages(count) {
+    const addRowLink = document.querySelector('#pages-group .add-row a');
+
+    let maxPage = 0;
+    const allRows = Array.from(document.querySelectorAll('#pages-group tbody tr.form-row:not(.empty-form)'));
+    allRows.forEach(row => {
+      const delInput = row.querySelector('input[id$="-DELETE"]');
+      if (delInput && delInput.checked) return;
+      if (row.style.display === 'none') return;
+
+      const numInput = row.querySelector('input[id$="-number"]');
+      const endInput = row.querySelector('input[id$="-spread_end"]');
+
+      if (numInput && numInput.value) {
+        const n = parseInt(numInput.value, 10);
+        if (!isNaN(n) && n > maxPage) maxPage = n;
+      }
+      if (endInput && endInput.value) {
+        const e = parseInt(endInput.value, 10);
+        if (!isNaN(e) && e > maxPage) maxPage = e;
+      }
+    });
+
+    let nextNum = maxPage > 0 ? maxPage + 1 : 1;
+
+    const visibleRows = getVisibleRows();
+    visibleRows.forEach(row => {
+      if (count <= 0) return;
+      const numInput = row.querySelector('input[id$="-number"]');
+      const endInput = row.querySelector('input[id$="-spread_end"]');
+
+      if (numInput && !numInput.value && (!endInput || !endInput.value)) {
+        numInput.value = nextNum++;
+        count--;
+      }
+    });
+
+    for (let i = 0; i < count; i++) {
+      if (addRowLink) {
+        addRowLink.click();
+        const currentRows = getVisibleRows();
+        const lastRow = currentRows[currentRows.length - 1];
+        if (lastRow) {
+          const numInput = lastRow.querySelector('input[id$="-number"]');
+          if (numInput) numInput.value = nextNum++;
+        }
+      }
+    }
+
+    updateTableActions();
+  }
+
+  function renumberPages() {
+    const visibleRows = getVisibleRows();
+    let current = 1;
+    visibleRows.forEach(row => {
+      const numInput = row.querySelector('input[id$="-number"]');
+      const endInput = row.querySelector('input[id$="-spread_end"]');
+      if (numInput) {
+        numInput.value = current;
+        if (endInput && endInput.value) {
+          const oldEnd = parseInt(endInput.value, 10);
+          const oldStart = parseInt(numInput.dataset.oldNum || numInput.value, 10);
+          const diff = !isNaN(oldEnd) && !isNaN(oldStart) && oldEnd > oldStart ? oldEnd - oldStart : 1;
+          endInput.value = current + diff;
+          current += diff + 1;
+        } else {
+          current++;
+        }
+      }
+    });
+    updateTableActions();
+  }
+
+  function updateTableActions() {
+    const table = document.querySelector('#pages-group table');
+    if (!table) return;
+
+    let theadTr = table.querySelector('thead tr');
+    if (theadTr && !theadTr.querySelector('.column-actions-header')) {
+      const th = document.createElement('th');
+      th.className = 'column-actions-header';
+      th.textContent = 'Разворот';
+      const deleteTh = theadTr.querySelector('th:last-child');
+      if (deleteTh) {
+        theadTr.insertBefore(th, deleteTh);
+      } else {
+        theadTr.appendChild(th);
+      }
+    }
+
+    const visibleRows = getVisibleRows();
+
+    visibleRows.forEach((row, index) => {
+      let actionsTd = row.querySelector('td.field-actions-cell');
+      if (!actionsTd) {
+        actionsTd = document.createElement('td');
+        actionsTd.className = 'field-actions-cell';
+        const deleteTd = row.querySelector('td.delete') || row.querySelector('td:last-child');
+        if (deleteTd) {
+          row.insertBefore(actionsTd, deleteTd);
+        } else {
+          row.appendChild(actionsTd);
+        }
+      }
+
+      actionsTd.innerHTML = '';
+
+      const numInput = row.querySelector('input[id$="-number"]');
+      const endInput = row.querySelector('input[id$="-spread_end"]');
+
+      const numA = numInput ? parseInt(numInput.value, 10) : NaN;
+      const endA = endInput ? parseInt(endInput.value, 10) : NaN;
+
+      const isSpread = !isNaN(endA) && endA > 0;
+
+      if (isSpread) {
+        const unmergeBtn = document.createElement('button');
+        unmergeBtn.type = 'button';
+        unmergeBtn.className = 'coloring-pages-btn unmerge-btn';
+        unmergeBtn.textContent = 'Разбить разворот';
+        unmergeBtn.title = `Разбить разворот (${numA}–${endA})`;
+        unmergeBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          unmergeRow(row);
+        });
+        actionsTd.appendChild(unmergeBtn);
+      } else {
+        const nextRow = visibleRows[index + 1];
+        if (nextRow) {
+          const nextNumInput = nextRow.querySelector('input[id$="-number"]');
+          const nextEndInput = nextRow.querySelector('input[id$="-spread_end"]');
+
+          const numB = nextNumInput ? parseInt(nextNumInput.value, 10) : NaN;
+          const endB = nextEndInput ? parseInt(nextEndInput.value, 10) : NaN;
+
+          const targetEnd = !isNaN(endB) ? endB : !isNaN(numB) ? numB : !isNaN(numA) ? numA + 1 : null;
+
+          if (targetEnd !== null) {
+            const mergeBtn = document.createElement('button');
+            mergeBtn.type = 'button';
+            mergeBtn.className = 'coloring-pages-btn merge-btn';
+            mergeBtn.textContent = `⤺ Смержить с ${targetEnd}`;
+            mergeBtn.title = `Объединить страницу ${numA || ''} и ${targetEnd} в разворот`;
+            mergeBtn.addEventListener('click', function (e) {
+              e.preventDefault();
+              mergeRows(row, nextRow, targetEnd);
+            });
+            actionsTd.appendChild(mergeBtn);
+          }
+        }
+      }
+    });
+  }
+
+  function mergeRows(rowA, rowB, targetEnd) {
+    const endInput = rowA.querySelector('input[id$="-spread_end"]');
+    if (endInput) {
+      endInput.value = targetEnd;
+    }
+
+    rowB.setAttribute('data-merged-by', rowA.id || 'row');
+    const delInput = rowB.querySelector('input[id$="-DELETE"]');
+    if (delInput) {
+      delInput.checked = true;
+      delInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    rowB.style.display = 'none';
+
+    updateTableActions();
+  }
+
+  function unmergeRow(rowA) {
+    const endInput = rowA.querySelector('input[id$="-spread_end"]');
+    const oldEnd = endInput ? parseInt(endInput.value, 10) : NaN;
+    if (endInput) {
+      endInput.value = '';
+    }
+
+    const rowId = rowA.id || 'row';
+    const hiddenRow = document.querySelector(`#pages-group tr[data-merged-by="${rowId}"]`);
+
+    if (hiddenRow) {
+      hiddenRow.removeAttribute('data-merged-by');
+      const delInput = hiddenRow.querySelector('input[id$="-DELETE"]');
+      if (delInput) {
+        delInput.checked = false;
+        delInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      hiddenRow.style.display = '';
+    } else if (!isNaN(oldEnd)) {
+      const addRowLink = document.querySelector('#pages-group .add-row a');
+      if (addRowLink) {
+        addRowLink.click();
+        const currentRows = getVisibleRows();
+        const lastRow = currentRows[currentRows.length - 1];
+        if (lastRow) {
+          const numInput = lastRow.querySelector('input[id$="-number"]');
+          if (numInput) numInput.value = oldEnd;
+        }
+      }
+    }
+
+    updateTableActions();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initColoringBookAdmin);
+  } else {
+    initColoringBookAdmin();
+  }
+})();
+</script>

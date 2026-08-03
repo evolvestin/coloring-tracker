@@ -15,6 +15,7 @@ class ColoringPageInline(admin.TabularInline):
     model = ColoringPage
     extra = 1
     fields = ('number', 'spread_end', 'title')
+    template = 'admin/app/coloringpage/tabular.html'
 
 
 @admin.register(ColoringBook)
