@@ -131,6 +131,7 @@ class ColoringWork(TimestampedModel):
     page = models.ForeignKey(ColoringPage, on_delete=models.CASCADE, related_name='works')
     completed_at = models.DateField('Дата завершения', auto_now_add=True)
     note = models.CharField('Заметка', max_length=500, blank=True)
+    hide_in_report = models.BooleanField('Не отображать в статистике', default=False)
 
     class Meta:
         verbose_name = 'Раскрашенная работа'

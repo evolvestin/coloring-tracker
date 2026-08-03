@@ -315,6 +315,9 @@ def tracker_book_detail(request, user_book_id):
             'label': page.label,
             'title': page.title,
             'completed': page.id in works_by_page,
+            'hide_in_report': works_by_page[page.id].hide_in_report
+            if page.id in works_by_page
+            else False,
             'photo': media_url(
                 request, photos_by_page[page.id].image, photos_by_page[page.id].updated_at
             )
@@ -340,6 +343,17 @@ def tracker_work(request, user_book_id, page_id):
         ColoringWork.objects.filter(user_book=user_book, page=page).delete()
         return JsonResponse({'ok': True})
     work, _ = ColoringWork.objects.get_or_create(user_book=user_book, page=page)
+    if 'hide_in_report' in request.POST:
+        work.hide_in_report = request.POST.get('hide_in_report') in ('true', 'True', '1', True)
+        work.save(update_fields=('hide_in_report', 'updated_at'))
+    elif request.content_type == 'application/json':
+        try:
+            payload = json.loads(request.body or '{}')
+            if 'hide_in_report' in payload:
+                work.hide_in_report = bool(payload['hide_in_report'])
+                work.save(update_fields=('hide_in_report', 'updated_at'))
+        except json.JSONDecodeError:
+            pass
     if photo := request.FILES.get('photo'):
         page_photo, _ = ColoringPagePhoto.objects.get_or_create(user_book=user_book, page=page)
         page_photo.image = photo
@@ -348,6 +362,7 @@ def tracker_work(request, user_book_id, page_id):
     return JsonResponse(
         {
             'id': work.id,
+            'hide_in_report': work.hide_in_report,
             'photo': media_url(request, page_photo.image, page_photo.updated_at)
             if page_photo
             else '',
@@ -387,7 +402,9 @@ def tracker_month_report(request):
         {
             work.completed_at.strftime('%Y-%m')
             for work in ColoringWork.objects.filter(
-                user_book__in=user_books(request), completed_at__gte=REPORT_LAUNCH_DATE
+                user_book__in=user_books(request),
+                completed_at__gte=REPORT_LAUNCH_DATE,
+                hide_in_report=False,
             ).only('completed_at')
         },
         reverse=True,
@@ -407,7 +424,9 @@ def tracker_month_report(request):
         return JsonResponse({'error': 'Ожидается месяц в формате ГГГГ-ММ'}, status=400)
     works = (
         ColoringWork.objects.filter(
-            user_book__in=user_books(request), completed_at__range=(first_day, last_day)
+            user_book__in=user_books(request),
+            completed_at__range=(first_day, last_day),
+            hide_in_report=False,
         )
         .select_related('user_book__book', 'page')
         .order_by('-completed_at', '-created_at')

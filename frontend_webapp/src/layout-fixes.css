@@ -1,3 +1,12 @@
+html {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
+}
+
 /* Cross-screen layout safeguards for the tracker and month report. */
 .book-card{display:grid;grid-template-areas:"cover" "title";gap:8px;position:relative}.book-card img,.book-card .cover-placeholder{grid-area:cover}.book-card strong{position:static;grid-area:cover;align-self:end;justify-self:end;margin:0 7px 7px 0;line-height:1.1}.book-card span{grid-area:title;margin:0 2px}
 

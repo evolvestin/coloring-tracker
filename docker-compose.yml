@@ -34,6 +34,10 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
     volumes:
       - ./data:/app/data
+      - ./app:/app/app
+      - ./coloring_tracker:/app/coloring_tracker
+      - ./templates:/app/templates
+      - ./manage.py:/app/manage.py
     command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && python manage.py createsuperuserifneeded"
     depends_on:
       init:
@@ -67,9 +71,17 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
     volumes:
       - ./data:/app/data
+      - ./app:/app/app
+      - ./coloring_tracker:/app/coloring_tracker
+      - ./templates:/app/templates
+      - ./manage.py:/app/manage.py
     command: >-
-      sh -c 'exec gunicorn coloring_tracker.wsgi:application
-      --bind 0.0.0.0:$${WEB_PORT:-8022}'
+      sh -c 'case "$$(echo "$$VITE_DEV_MODE" | tr "[:upper:]" "[:lower:]")" in
+      true|1|yes) exec gunicorn coloring_tracker.wsgi:application
+      --bind 0.0.0.0:$${WEB_PORT:-8022} --reload ;;
+      *) exec gunicorn coloring_tracker.wsgi:application
+      --bind 0.0.0.0:$${WEB_PORT:-8022} ;;
+      esac'
     ports:
       - "${WEB_PORT:-8022}:${WEB_PORT:-8022}"
     healthcheck:
@@ -92,6 +104,9 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
     volumes:
       - ./data:/app/data
+      - ./app:/app/app
+      - ./coloring_tracker:/app/coloring_tracker
+      - ./manage.py:/app/manage.py
     command: celery -A coloring_tracker worker -l INFO
     depends_on:
       app-init:
@@ -108,6 +123,9 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
     volumes:
       - ./data:/app/data
+      - ./app:/app/app
+      - ./coloring_tracker:/app/coloring_tracker
+      - ./manage.py:/app/manage.py
     command: celery -A coloring_tracker beat -l INFO --schedule=/app/data/celerybeat-schedule
     depends_on:
       app-init:
@@ -119,6 +137,10 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - ./tracker_bot:/app/tracker_bot
+      - ./app:/app/app
+      - ./coloring_tracker:/app/coloring_tracker
     command: python -m tracker_bot.main
     depends_on:
       web:

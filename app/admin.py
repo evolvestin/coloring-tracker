@@ -38,9 +38,9 @@ class UserBookAdmin(admin.ModelAdmin):
 
 @admin.register(ColoringWork)
 class ColoringWorkAdmin(admin.ModelAdmin):
-    list_display = ('user_book', 'page', 'completed_at')
-    list_filter = ('completed_at', 'user_book__book')
-    fields = ('user_book', 'page', 'completed_at', 'note')
+    list_display = ('user_book', 'page', 'completed_at', 'hide_in_report')
+    list_filter = ('completed_at', 'user_book__book', 'hide_in_report')
+    fields = ('user_book', 'page', 'completed_at', 'note', 'hide_in_report')
 
 
 @admin.register(ColoringPagePhoto)
