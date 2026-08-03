@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 
 from app.models import (
@@ -11,8 +12,37 @@ from app.models import (
 )
 
 
+class ColoringPageFormSet(forms.BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        pages = []
+        for form in self.forms:
+            if not form.is_valid():
+                continue
+            if self._should_delete_form(form):
+                continue
+            if not form.cleaned_data or form.cleaned_data.get('DELETE'):
+                continue
+            number = form.cleaned_data.get('number')
+            if number is None:
+                continue
+            spread_end = form.cleaned_data.get('spread_end')
+            last_page = spread_end or number
+            pages.append((number, last_page, form))
+
+        pages.sort(key=lambda item: item[0])
+        for i in range(len(pages) - 1):
+            num1, last1, form1 = pages[i]
+            num2, last2, form2 = pages[i + 1]
+            if num1 <= last2 and num2 <= last1:
+                msg = 'Страницы и развороты в одной раскраске не должны пересекаться.'
+                form1.add_error('number', msg)
+                form2.add_error('number', msg)
+
+
 class ColoringPageInline(admin.TabularInline):
     model = ColoringPage
+    formset = ColoringPageFormSet
     extra = 1
     fields = ('number', 'spread_end', 'title')
     template = 'admin/app/coloringpage/tabular.html'

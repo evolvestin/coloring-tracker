@@ -112,15 +112,6 @@ class ColoringPage(TimestampedModel):
         super().clean()
         if self.spread_end and self.spread_end <= self.number:
             raise ValidationError({'spread_end': 'Последняя страница должна быть больше первой.'})
-        if not self.book_id:
-            return
-        last_page = self.spread_end or self.number
-        for page in ColoringPage.objects.filter(book_id=self.book_id).exclude(pk=self.pk):
-            existing_last = page.spread_end or page.number
-            if self.number <= existing_last and page.number <= last_page:
-                raise ValidationError(
-                    'Страницы и развороты в одной раскраске не должны пересекаться.'
-                )
 
 
 class UserBook(TimestampedModel):
