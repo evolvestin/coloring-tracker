@@ -243,11 +243,11 @@
       const numInput = row.querySelector('input[id$="-number"]');
       const endInput = row.querySelector('input[id$="-spread_end"]');
       if (numInput) {
+        const oldStart = parseInt(numInput.value, 10);
+        const oldEnd = endInput ? parseInt(endInput.value, 10) : NaN;
         numInput.value = current;
-        if (endInput && endInput.value) {
-          const oldEnd = parseInt(endInput.value, 10);
-          const oldStart = parseInt(numInput.dataset.oldNum || numInput.value, 10);
-          const diff = !isNaN(oldEnd) && !isNaN(oldStart) && oldEnd > oldStart ? oldEnd - oldStart : 1;
+        if (!isNaN(oldEnd) && !isNaN(oldStart) && oldEnd > oldStart) {
+          const diff = oldEnd - oldStart;
           endInput.value = current + diff;
           current += diff + 1;
         } else {
@@ -361,7 +361,6 @@
       delInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    if (numInputB) numInputB.value = '';
     if (endInputB) endInputB.value = '';
     if (titleInputB) titleInputB.value = '';
 
@@ -405,40 +404,6 @@
         delete hiddenRow.dataset.savedTitle;
       }
 
-      hiddenRow.style.display = '';
-    } else if (!isNaN(oldEnd)) {
-      const addRowLink = document.querySelector('#pages-group .add-row a');
-      if (addRowLink) {
-        addRowLink.click();
-        const currentRows = getVisibleRows();
-        const lastRow = currentRows[currentRows.length - 1];
-        if (lastRow) {
-          const numInput = lastRow.querySelector('input[id$="-number"]');
-          if (numInput) numInput.value = oldEnd;
-        }
-      }
-    }
-
-    updateTableActions();
-  }
-
-  function unmergeRow(rowA) {
-    const endInput = rowA.querySelector('input[id$="-spread_end"]');
-    const oldEnd = endInput ? parseInt(endInput.value, 10) : NaN;
-    if (endInput) {
-      endInput.value = '';
-    }
-
-    const rowId = rowA.id || 'row';
-    const hiddenRow = document.querySelector(`#pages-group tr[data-merged-by="${rowId}"]`);
-
-    if (hiddenRow) {
-      hiddenRow.removeAttribute('data-merged-by');
-      const delInput = hiddenRow.querySelector('input[id$="-DELETE"]');
-      if (delInput) {
-        delInput.checked = false;
-        delInput.dispatchEvent(new Event('change', { bubbles: true }));
-      }
       hiddenRow.style.display = '';
     } else if (!isNaN(oldEnd)) {
       const addRowLink = document.querySelector('#pages-group .add-row a');
