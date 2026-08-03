@@ -346,12 +346,78 @@
     }
 
     rowB.setAttribute('data-merged-by', rowA.id || 'row');
+
+    const numInputB = rowB.querySelector('input[id$="-number"]');
+    const endInputB = rowB.querySelector('input[id$="-spread_end"]');
+    const titleInputB = rowB.querySelector('input[id$="-title"]');
+
+    if (numInputB) rowB.dataset.savedNumber = numInputB.value;
+    if (endInputB) rowB.dataset.savedSpreadEnd = endInputB.value;
+    if (titleInputB) rowB.dataset.savedTitle = titleInputB.value;
+
     const delInput = rowB.querySelector('input[id$="-DELETE"]');
     if (delInput) {
       delInput.checked = true;
       delInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
+
+    if (numInputB) numInputB.value = '';
+    if (endInputB) endInputB.value = '';
+    if (titleInputB) titleInputB.value = '';
+
     rowB.style.display = 'none';
+
+    updateTableActions();
+  }
+
+  function unmergeRow(rowA) {
+    const endInput = rowA.querySelector('input[id$="-spread_end"]');
+    const oldEnd = endInput ? parseInt(endInput.value, 10) : NaN;
+    if (endInput) {
+      endInput.value = '';
+    }
+
+    const rowId = rowA.id || 'row';
+    const hiddenRow = document.querySelector(`#pages-group tr[data-merged-by="${rowId}"]`);
+
+    if (hiddenRow) {
+      hiddenRow.removeAttribute('data-merged-by');
+      const delInput = hiddenRow.querySelector('input[id$="-DELETE"]');
+      if (delInput) {
+        delInput.checked = false;
+        delInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      const numInputB = hiddenRow.querySelector('input[id$="-number"]');
+      const endInputB = hiddenRow.querySelector('input[id$="-spread_end"]');
+      const titleInputB = hiddenRow.querySelector('input[id$="-title"]');
+
+      if (numInputB && hiddenRow.dataset.savedNumber !== undefined) {
+        numInputB.value = hiddenRow.dataset.savedNumber;
+        delete hiddenRow.dataset.savedNumber;
+      }
+      if (endInputB && hiddenRow.dataset.savedSpreadEnd !== undefined) {
+        endInputB.value = hiddenRow.dataset.savedSpreadEnd;
+        delete hiddenRow.dataset.savedSpreadEnd;
+      }
+      if (titleInputB && hiddenRow.dataset.savedTitle !== undefined) {
+        titleInputB.value = hiddenRow.dataset.savedTitle;
+        delete hiddenRow.dataset.savedTitle;
+      }
+
+      hiddenRow.style.display = '';
+    } else if (!isNaN(oldEnd)) {
+      const addRowLink = document.querySelector('#pages-group .add-row a');
+      if (addRowLink) {
+        addRowLink.click();
+        const currentRows = getVisibleRows();
+        const lastRow = currentRows[currentRows.length - 1];
+        if (lastRow) {
+          const numInput = lastRow.querySelector('input[id$="-number"]');
+          if (numInput) numInput.value = oldEnd;
+        }
+      }
+    }
 
     updateTableActions();
   }
