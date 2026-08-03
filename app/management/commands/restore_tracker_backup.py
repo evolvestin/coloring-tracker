@@ -1,6 +1,9 @@
 import json
 import os
+import shutil
 import subprocess
+import tempfile
+import zipfile
 from pathlib import Path
 
 from django.conf import settings
@@ -12,7 +15,7 @@ from googleapiclient.http import MediaIoBaseDownload
 
 
 class Command(BaseCommand):
-    help = 'Restore the database from the configured PostgreSQL dump in Google Drive.'
+    help = 'Restore the database and media files from the configured backup archive in Google Drive.'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -76,37 +79,56 @@ class Command(BaseCommand):
             database = settings.DATABASES['default']
             restore_environment = os.environ.copy()
             restore_environment['PGPASSWORD'] = database['PASSWORD']
-            connections.close_all()
-            self.stdout.write(f'Downloaded {backup_name}; restoring the PostgreSQL database.')
-            try:
-                subprocess.run(
-                    [
-                        'pg_restore',
-                        '--clean',
-                        '--if-exists',
-                        '--no-owner',
-                        '--no-privileges',
-                        '--exit-on-error',
-                        '--host',
-                        database['HOST'],
-                        '--port',
-                        str(database['PORT']),
-                        '--username',
-                        database['USER'],
-                        '--dbname',
-                        database['NAME'],
-                        str(backup_file),
-                    ],
-                    check=True,
-                    env=restore_environment,
-                )
-            except FileNotFoundError as error:
-                raise CommandError('pg_restore is not installed in this environment.') from error
-            except subprocess.CalledProcessError as error:
-                raise CommandError(
-                    f'pg_restore failed with exit code {error.returncode}.'
-                ) from error
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_dir_path = Path(temp_dir)
+                if zipfile.is_zipfile(backup_file):
+                    with zipfile.ZipFile(backup_file, 'r') as zip_file:
+                        zip_file.extractall(temp_dir_path)
+                    db_dump_file = temp_dir_path / 'db.dump'
+                    extracted_media_dir = temp_dir_path / 'media'
+                    if extracted_media_dir.exists():
+                        target_media_dir = Path(settings.MEDIA_ROOT)
+                        target_media_dir.mkdir(parents=True, exist_ok=True)
+                        for file_path in extracted_media_dir.rglob('*'):
+                            if file_path.is_file():
+                                destination = target_media_dir / file_path.relative_to(extracted_media_dir)
+                                destination.parent.mkdir(parents=True, exist_ok=True)
+                                shutil.copy2(file_path, destination)
+                else:
+                    db_dump_file = backup_file
+
+                connections.close_all()
+                self.stdout.write(f'Downloaded {backup_name}; restoring PostgreSQL database and media files.')
+                try:
+                    subprocess.run(
+                        [
+                            'pg_restore',
+                            '--clean',
+                            '--if-exists',
+                            '--no-owner',
+                            '--no-privileges',
+                            '--exit-on-error',
+                            '--host',
+                            database['HOST'],
+                            '--port',
+                            str(database['PORT']),
+                            '--username',
+                            database['USER'],
+                            '--dbname',
+                            database['NAME'],
+                            str(db_dump_file),
+                        ],
+                        check=True,
+                        env=restore_environment,
+                    )
+                except FileNotFoundError as error:
+                    raise CommandError('pg_restore is not installed in this environment.') from error
+                except subprocess.CalledProcessError as error:
+                    raise CommandError(
+                        f'pg_restore failed with exit code {error.returncode}.'
+                    ) from error
         finally:
             backup_file.unlink(missing_ok=True)
 
-        self.stdout.write(self.style.SUCCESS(f'Database restored from {backup_name}.'))
+        self.stdout.write(self.style.SUCCESS(f'Database and media restored from {backup_name}.'))
