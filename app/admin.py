@@ -18,6 +18,18 @@ class ColoringPageInline(admin.TabularInline):
     template = 'admin/app/coloringpage/tabular.html'
 
 
+def pluralize_ru(count, one, two, many):
+    n = abs(count) % 100
+    n1 = n % 10
+    if 11 <= n <= 19:
+        return f'{count} {many}'
+    if 2 <= n1 <= 4:
+        return f'{count} {two}'
+    if n1 == 1:
+        return f'{count} {one}'
+    return f'{count} {many}'
+
+
 @admin.register(ColoringBook)
 class ColoringBookAdmin(admin.ModelAdmin):
     list_display = ('title', 'report_icon', 'author', 'publisher', 'is_published', 'page_count')
@@ -25,9 +37,16 @@ class ColoringBookAdmin(admin.ModelAdmin):
     search_fields = ('title', 'author', 'publisher')
     inlines = (ColoringPageInline,)
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('pages')
+
     @admin.display(description='Страниц')
     def page_count(self, book):
-        return book.pages.count()
+        total = book.total_pages_count
+        spreads = book.spreads_count
+        if spreads:
+            return f'{total} ({pluralize_ru(spreads, "разворот", "разворота", "разворотов")})'
+        return str(total)
 
 
 @admin.register(UserBook)

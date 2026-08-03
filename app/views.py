@@ -8,6 +8,7 @@ from datetime import date
 from urllib.parse import parse_qsl
 
 from django.conf import settings
+from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -209,8 +210,6 @@ def tracker_catalog(request):
     query = request.GET.get('q', '').strip()
     catalogue = ColoringBook.objects.filter(is_published=True).prefetch_related('pages')
     if query:
-        from django.db.models import Q
-
         catalogue = catalogue.filter(
             Q(title__icontains=query) | Q(author__icontains=query) | Q(publisher__icontains=query)
         )
@@ -222,7 +221,8 @@ def tracker_catalog(request):
                     'title': book.title,
                     'author': book.author,
                     'cover': book.cover.url if book.cover else '',
-                    'pages': book.pages.count(),
+                    'pages': book.total_pages_count,
+                    'spreads': book.spreads_count,
                     'owned': book.id in owned,
                     'collection_id': collection[book.id].id if book.id in collection else None,
                     'completed': collection[book.id].works.count() if book.id in collection else 0,
@@ -248,7 +248,8 @@ def tracker_catalog_book_detail(request, book_id):
                 'publisher': book.publisher,
                 'description': book.description,
                 'cover': book.cover.url if book.cover else '',
-                'pages': book.pages.count(),
+                'pages': book.total_pages_count,
+                'spreads': book.spreads_count,
             },
             'pages': [
                 {
@@ -281,7 +282,7 @@ def tracker_profile(request):
     if not user:
         return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
     books = user_books(request)
-    total = sum(item.book.pages.count() for item in books)
+    total = sum(item.book.total_pages_count for item in books)
     completed = ColoringWork.objects.filter(user_book__in=books).count()
     return JsonResponse(
         {
@@ -295,7 +296,9 @@ def tracker_profile(request):
                 'books': books.count(),
                 'completed': completed,
                 'total': total,
-                'progress': round(completed * 100 / total) if total else 0,
+                'progress': round(completed * 100 / sum(item.book.pages.count() for item in books))
+                if books
+                else 0,
             },
         }
     )

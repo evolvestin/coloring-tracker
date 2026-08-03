@@ -72,6 +72,14 @@ class ColoringBook(TimestampedModel):
     def __str__(self):
         return self.title
 
+    @property
+    def total_pages_count(self):
+        return sum(p.page_count for p in self.pages.all())
+
+    @property
+    def spreads_count(self):
+        return sum(1 for p in self.pages.all() if p.spread_end)
+
 
 class ColoringPage(TimestampedModel):
     """One work; a spread is represented by one record with spread_end set."""
@@ -88,6 +96,10 @@ class ColoringPage(TimestampedModel):
         constraints = [
             models.UniqueConstraint(fields=('book', 'number'), name='unique_coloring_page')
         ]
+
+    @property
+    def page_count(self):
+        return (self.spread_end - self.number + 1) if self.spread_end else 1
 
     @property
     def label(self):
