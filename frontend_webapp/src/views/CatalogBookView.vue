@@ -3,8 +3,10 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 import { formatCount } from '../pluralize'
+import { useTrackerStore } from '../stores/tracker'
 
-const route = useRoute(), router = useRouter(), data = ref(null), adding = ref(false)
+const route = useRoute(), router = useRouter(), trackerStore = useTrackerStore()
+const data = ref(null), adding = ref(false)
 async function load() { data.value = await api(`/api/tracker/catalog/${route.params.id}/`) }
 async function add() {
   if (adding.value) return
@@ -12,8 +14,9 @@ async function add() {
   try {
     await api('/api/tracker/books/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ book_id: route.params.id }) })
     await Promise.all([
-      useTrackerStore().loadCatalog('', true),
-      useTrackerStore().loadCollection(true),
+      trackerStore.loadCatalog('', true),
+      trackerStore.loadCollection(true),
+      trackerStore.loadReport('', true),
     ])
     router.push('/')
   } finally { adding.value = false }

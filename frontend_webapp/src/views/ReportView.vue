@@ -91,13 +91,7 @@ function monthLabel(value) {
 }
 
 onMounted(() => {
-  if (month.value) {
-    load()
-  } else {
-    store.loadReport().then(() => {
-      if (store.report?.month) month.value = store.report.month
-    })
-  }
+  load()
   document.addEventListener('pointerdown', closeMonthPicker)
 })
 onBeforeUnmount(() => document.removeEventListener('pointerdown', closeMonthPicker))

@@ -27,7 +27,11 @@ async function add(book) {
   busy.value = true
   try {
     await api('/api/tracker/books/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ book_id: book.id }) })
-    await Promise.all([store.loadCatalog(query.value, true), store.loadCollection(true)])
+    await Promise.all([
+      store.loadCatalog(query.value, true),
+      store.loadCollection(true),
+      store.loadReport('', true),
+    ])
   } finally { busy.value = false }
 }
 
@@ -37,7 +41,11 @@ async function remove() {
   try {
     await api(`/api/tracker/catalog/${removing.value.id}/collection/`, { method: 'DELETE' })
     removing.value = null
-    await Promise.all([store.loadCatalog(query.value, true), store.loadCollection(true)])
+    await Promise.all([
+      store.loadCatalog(query.value, true),
+      store.loadCollection(true),
+      store.loadReport('', true),
+    ])
   } finally { busy.value = false }
 }
 

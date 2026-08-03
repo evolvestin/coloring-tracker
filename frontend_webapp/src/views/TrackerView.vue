@@ -16,7 +16,7 @@ const progress = computed(() => totals.value.total ? Math.round(totals.value.don
 const name = computed(() => profile.value?.user?.name || 'Моя коллекция')
 
 onMounted(() => {
-  store.loadCollection()
+  store.loadCollection(true)
 })
 </script>
 

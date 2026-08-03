@@ -313,6 +313,7 @@ def tracker_book_detail(request, user_book_id):
             'number': page.number,
             'spread_end': page.spread_end,
             'label': page.label,
+            'title': page.title,
             'completed': page.id in works_by_page,
             'photo': media_url(
                 request, photos_by_page[page.id].image, photos_by_page[page.id].updated_at

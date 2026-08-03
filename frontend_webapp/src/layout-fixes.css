@@ -12,3 +12,5 @@ html .month-picker{flex:none}
 html .book-card strong{position:relative;right:auto;bottom:auto;z-index:1;display:block;padding:3px 5px;border-radius:8px;background:#6e344999;color:#fff;text-shadow:none}
 
 html .activity-days{display:grid;gap:8px}html .activity-day{padding:0;border:0}html .activity-day>time{display:block;margin:0 0 4px;color:#c7678d;font-size:12px;font-weight:800;line-height:1.35;text-transform:capitalize}.activity-works{display:grid;gap:4px}html .activity-work{grid-template-columns:minmax(0,1fr) auto;padding:8px 10px}html .photo-mark{display:inline-flex;align-items:center;gap:4px;color:#c45f88;font-size:11px;font-weight:800;white-space:nowrap}html .photo-mark svg{width:15px;height:15px;stroke-width:1.8}
+
+html .coloring-page span{right:32px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
