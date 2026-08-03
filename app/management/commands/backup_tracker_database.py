@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 import subprocess
 import tempfile
 import zipfile
@@ -81,7 +80,10 @@ class Command(BaseCommand):
                 matching_files = (
                     drive.files()
                     .list(
-                        q=(f"'{folder_id}' in parents and name = '{escaped_name}' and trashed = false"),
+                        q=(
+                            f"'{folder_id}' in parents and name = "
+                            f"'{escaped_name}' and trashed = false"
+                        ),
                         spaces='drive',
                         fields='files(id, name)',
                         supportsAllDrives=True,
@@ -106,4 +108,6 @@ class Command(BaseCommand):
             finally:
                 backup_file.unlink(missing_ok=True)
 
-        self.stdout.write(self.style.SUCCESS(f'Updated {backup_name} with database dump and media files.'))
+        self.stdout.write(
+            self.style.SUCCESS(f'Updated {backup_name} with database dump and media files.')
+        )

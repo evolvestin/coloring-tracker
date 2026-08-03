@@ -15,7 +15,9 @@ from googleapiclient.http import MediaIoBaseDownload
 
 
 class Command(BaseCommand):
-    help = 'Restore the database and media files from the configured backup archive in Google Drive.'
+    help = (
+        'Restore the database and media files from the configured backup archive in Google Drive.'
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -92,14 +94,18 @@ class Command(BaseCommand):
                         target_media_dir.mkdir(parents=True, exist_ok=True)
                         for file_path in extracted_media_dir.rglob('*'):
                             if file_path.is_file():
-                                destination = target_media_dir / file_path.relative_to(extracted_media_dir)
+                                destination = target_media_dir / file_path.relative_to(
+                                    extracted_media_dir
+                                )
                                 destination.parent.mkdir(parents=True, exist_ok=True)
                                 shutil.copy2(file_path, destination)
                 else:
                     db_dump_file = backup_file
 
                 connections.close_all()
-                self.stdout.write(f'Downloaded {backup_name}; restoring PostgreSQL database and media files.')
+                self.stdout.write(
+                    f'Downloaded {backup_name}; restoring PostgreSQL database and media files.'
+                )
                 try:
                     subprocess.run(
                         [
@@ -123,7 +129,9 @@ class Command(BaseCommand):
                         env=restore_environment,
                     )
                 except FileNotFoundError as error:
-                    raise CommandError('pg_restore is not installed in this environment.') from error
+                    raise CommandError(
+                        'pg_restore is not installed in this environment.'
+                    ) from error
                 except subprocess.CalledProcessError as error:
                     raise CommandError(
                         f'pg_restore failed with exit code {error.returncode}.'
