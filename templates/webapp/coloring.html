@@ -7,12 +7,8 @@
     <link rel="icon" href="data:,">
     <title>Трекер раскрасок</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    {% if vite_dev_mode %}
-      <script type="module" src="{{ vite_dev_server_url }}/@vite/client"></script>
-      <script type="module" src="{{ vite_dev_server_url }}/src/main.js"></script>
-    {% else %}
-      {% vite_asset 'src/main.js' %}
-    {% endif %}
+    {% vite_hmr_client %}
+    {% vite_asset 'src/main.js' %}
   </head>
   <body><div id="app"></div></body>
 </html>

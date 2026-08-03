@@ -49,14 +49,12 @@ services:
     restart: unless-stopped
     env_file: .env
     command: >-
-      sh -c 'if [ "$$VITE_DEV_MODE" = "true" ]; then
-      npm ci && exec npm run dev -- --host 0.0.0.0;
-      else exec sleep infinity; fi'
+      sh -c 'case "$$(echo "$$VITE_DEV_MODE" | tr "[:upper:]" "[:lower:]")" in true|1|yes) npm ci && exec npm run dev -- --host 0.0.0.0 ;; *) exec sleep infinity ;; esac'
     volumes:
       - .:/app
       - frontend_node_modules:/app/frontend_webapp/node_modules
     ports:
-      - "127.0.0.1:${VITE_DEV_SERVER_PORT:-5173}:5173"
+      - "${VITE_DEV_SERVER_PORT:-5173}:5173"
     environment:
       NODE_ENV: development
 

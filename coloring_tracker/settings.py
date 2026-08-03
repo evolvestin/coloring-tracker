@@ -87,7 +87,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'data' / 'media'
 DJANGO_VITE = {
     'default': {
-        'dev_mode': os.getenv('VITE_DEV_MODE', 'False').lower() == 'true',
+        'dev_mode': os.getenv('VITE_DEV_MODE', 'False').lower() in ('true', '1', 'yes'),
         'manifest_path': str(BASE_DIR / 'frontend_webapp' / 'dist' / 'manifest.json'),
         'dev_server_host': os.getenv('VITE_DEV_SERVER_HOST', 'localhost'),
         'dev_server_port': int(os.getenv('VITE_DEV_SERVER_PORT', '5173')),

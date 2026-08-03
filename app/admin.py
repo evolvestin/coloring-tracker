@@ -20,13 +20,13 @@ class ColoringPageInline(admin.TabularInline):
 
 @admin.register(ColoringBook)
 class ColoringBookAdmin(admin.ModelAdmin):
-    list_display = ('title', 'report_icon', 'author', 'publisher', 'is_published', 'work_count')
+    list_display = ('title', 'report_icon', 'author', 'publisher', 'is_published', 'page_count')
     list_filter = ('is_published',)
     search_fields = ('title', 'author', 'publisher')
     inlines = (ColoringPageInline,)
 
-    @admin.display(description='Работ')
-    def work_count(self, book):
+    @admin.display(description='Страниц')
+    def page_count(self, book):
         return book.pages.count()
 
 

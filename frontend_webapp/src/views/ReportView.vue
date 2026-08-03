@@ -9,7 +9,7 @@ const router = useRouter()
 const route = useRoute()
 const store = useTrackerStore()
 
-const month = ref(route.query.month || '')
+const month = ref(route.query.month || store.report?.month || '')
 const monthPickerOpen = ref(false)
 const monthPicker = ref(null)
 
@@ -77,8 +77,18 @@ const calendar = computed(() => {
   })
 })
 function capitalize(value) { return value ? value[0].toUpperCase() + value.slice(1) : value }
-function dateLabel(value) { return capitalize(new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', weekday: 'long' }).format(new Date(`${value}T12:00:00`))) }
-function monthLabel(value) { return capitalize(new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date(`${value}-01T12:00:00`))) }
+function dateLabel(value) {
+  if (!value) return ''
+  const date = new Date(`${value}T12:00:00`)
+  if (isNaN(date.getTime())) return ''
+  return capitalize(new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', weekday: 'long' }).format(date))
+}
+function monthLabel(value) {
+  if (!value) return ''
+  const date = new Date(`${value}-01T12:00:00`)
+  if (isNaN(date.getTime())) return ''
+  return capitalize(new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(date))
+}
 
 onMounted(() => {
   if (month.value) {

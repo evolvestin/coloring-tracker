@@ -37,15 +37,10 @@ def media_url(request, field, updated_at=None):
 
 
 def webapp_index(request):
-    vite_dev_mode = os.getenv('VITE_DEV_MODE', 'False').lower() == 'true'
     return render(
         request,
         'webapp/coloring.html',
         {
-            'vite_dev_mode': vite_dev_mode,
-            'vite_dev_server_url': os.getenv('VITE_DEV_SERVER_URL', 'http://localhost:5173').rstrip(
-                '/'
-            ),
             'local_preview_telegram_id': local_preview_telegram_id(request),
         },
     )
