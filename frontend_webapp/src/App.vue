@@ -8,8 +8,8 @@ const route = useRoute()
 const trackerStore = useTrackerStore()
 const hasInitData = !!window.Telegram?.WebApp?.initData
 const isDevBypass = new URLSearchParams(window.location.search).get('dev') === 'true'
-const isLocalPreview = new URLSearchParams(window.location.search).has('local_preview')
-const isTelegram = hasInitData || isDevBypass || isLocalPreview
+const isTrackerPreview = new URLSearchParams(window.location.search).has('tracker_preview')
+const isTelegram = hasInitData || isDevBypass || isTrackerPreview
 const activeTab = computed(() => route.path === '/catalog' ? 'catalog' : route.path === '/report' ? 'report' : 'tracker')
 
 onMounted(() => {

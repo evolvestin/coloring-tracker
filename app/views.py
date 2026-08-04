@@ -8,8 +8,9 @@ from datetime import date
 from urllib.parse import parse_qsl
 
 from django.conf import settings
+from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Q
-from django.http import Http404, JsonResponse
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.csrf import csrf_exempt
@@ -38,21 +39,13 @@ def media_url(request, field, updated_at=None):
 
 
 def webapp_index(request):
-    return render(
-        request,
-        'webapp/coloring.html',
-        {
-            'local_preview_telegram_id': local_preview_telegram_id(request),
-        },
-    )
+    return render(request, 'webapp/coloring.html')
 
 
-def local_preview_telegram_id(request):
-    """Return the impersonated user only for the loopback development preview."""
-    raw_id = request.headers.get('X-Local-Preview-Telegram-ID', '')
-    host = request.get_host().split(':', 1)[0].lower()
-    is_local_dev = settings.DEBUG or os.getenv('VITE_DEV_MODE', 'False').lower() == 'true'
-    if not raw_id or not is_local_dev or host not in {'localhost', '127.0.0.1', '::1'}:
+def tracker_preview_telegram_id(request):
+    """Return the impersonated user for an authenticated staff preview only."""
+    raw_id = request.headers.get('X-Tracker-Preview-Telegram-ID', '')
+    if not raw_id or not request.user.is_active or not request.user.is_staff:
         return None
     try:
         return int(raw_id)
@@ -60,32 +53,20 @@ def local_preview_telegram_id(request):
         return None
 
 
-def local_preview(request, telegram_id):
-    """A local-only frame that recreates a saved Telegram WebApp viewport."""
-    is_local_dev = settings.DEBUG or os.getenv('VITE_DEV_MODE', 'False').lower() == 'true'
-    if not is_local_dev or request.get_host().split(':', 1)[0].lower() not in {
-        'localhost',
-        '127.0.0.1',
-        '::1',
-    }:
-        raise Http404
+@staff_member_required
+def tracker_preview(request, telegram_id):
+    """Recreate a saved Telegram WebApp viewport for an administrator."""
     user = get_object_or_404(TrackerUser, telegram_id=telegram_id)
     viewport = None
     if user.webapp_viewport_width and user.webapp_viewport_height:
         viewport = {'width': user.webapp_viewport_width, 'height': user.webapp_viewport_height}
-    return render(request, 'webapp/local_preview.html', {'user': user, 'viewport': viewport})
+    return render(request, 'webapp/tracker_preview.html', {'user': user, 'viewport': viewport})
 
 
+@staff_member_required
 @xframe_options_sameorigin
-def local_preview_webapp(request, telegram_id):
-    """Serve the actual WebApp only inside the local preview frame."""
-    is_local_dev = settings.DEBUG or os.getenv('VITE_DEV_MODE', 'False').lower() == 'true'
-    if not is_local_dev or request.get_host().split(':', 1)[0].lower() not in {
-        'localhost',
-        '127.0.0.1',
-        '::1',
-    }:
-        raise Http404
+def tracker_preview_webapp(request, telegram_id):
+    """Serve the WebApp inside an authenticated staff preview frame."""
     get_object_or_404(TrackerUser, telegram_id=telegram_id)
     return webapp_index(request)
 
@@ -123,7 +104,7 @@ def tracker_identity(request):
             update_webapp_viewport(request, tracker_user)
             return tracker_user
 
-    preview_telegram_id = local_preview_telegram_id(request)
+    preview_telegram_id = tracker_preview_telegram_id(request)
     if preview_telegram_id:
         return TrackerUser.objects.filter(telegram_id=preview_telegram_id).first()
 

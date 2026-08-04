@@ -20,11 +20,11 @@ urlpatterns = [
     ),
     path('api/tracker/report/', views.tracker_month_report),
     path(
-        'local-preview-app/<int:telegram_id>/',
-        views.local_preview_webapp,
-        name='local-preview-webapp',
+        'tracker-preview-app/<int:telegram_id>/',
+        views.tracker_preview_webapp,
+        name='tracker-preview-webapp',
     ),
-    path('<int:telegram_id>/', views.local_preview, name='local-preview'),
+    path('tracker-preview/<int:telegram_id>/', views.tracker_preview, name='tracker-preview'),
     path('', views.webapp_index),
     re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
 ]

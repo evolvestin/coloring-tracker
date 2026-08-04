@@ -1,5 +1,7 @@
 from django import forms
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
 
 from app.models import (
     ColoringBook,
@@ -108,8 +110,23 @@ class ColoringColorCodeAdmin(admin.ModelAdmin):
 
 @admin.register(TrackerUser)
 class TrackerUserAdmin(admin.ModelAdmin):
-    list_display = ('display_name', 'username', 'telegram_id', 'webapp_viewport', 'created_at')
+    list_display = (
+        'display_name',
+        'username',
+        'telegram_id',
+        'tracker_preview_link',
+        'webapp_viewport',
+        'created_at',
+    )
     search_fields = ('display_name', 'username', 'telegram_id')
+    readonly_fields = ('tracker_preview_link',)
+
+    @admin.display(description='Предпросмотр')
+    def tracker_preview_link(self, user):
+        if not user.telegram_id:
+            return '—'
+        url = reverse('tracker-preview', args=(user.telegram_id,))
+        return format_html('<a href="{}" target="_blank" rel="noopener">Открыть iframe</a>', url)
 
     @admin.display(description='Размер WebApp')
     def webapp_viewport(self, user):

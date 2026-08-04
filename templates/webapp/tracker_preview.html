@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Локальный предпросмотр — {{ user }}</title>
+  <title>Предпросмотр трекера — {{ user }}</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #16191f; }
     * { box-sizing: border-box; }
@@ -14,7 +14,7 @@
 </head>
 <body>
   {% if viewport %}
-    <iframe class="viewport" title="WebApp {{ user }}" src="/local-preview-app/{{ user.telegram_id }}/?local_preview={{ user.telegram_id }}"></iframe>
+    <iframe class="viewport" title="WebApp {{ user }}" src="/tracker-preview-app/{{ user.telegram_id }}/?tracker_preview={{ user.telegram_id }}"></iframe>
   {% else %}
     <div class="message">Для пользователя <b>{{ user }}</b> ещё не сохранён размер WebApp. Откройте приложение один раз из Telegram и обновите эту страницу.</div>
   {% endif %}
