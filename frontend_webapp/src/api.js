@@ -14,6 +14,12 @@ export async function api(url, options = {}) {
     headers.set('X-WebApp-Viewport-Height', String(window.innerHeight))
   }
   const response = await fetch(url, { ...options, headers })
-  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Не удалось выполнить запрос')
+  if (!response.ok) {
+    const details = await response.json().catch(() => ({}))
+    const error = new Error(details.error || 'Не удалось выполнить запрос')
+    error.status = response.status
+    error.details = details
+    throw error
+  }
   return response.json()
 }

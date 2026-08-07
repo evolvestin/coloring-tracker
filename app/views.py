@@ -4,29 +4,38 @@ import json
 import os
 from calendar import monthrange
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from urllib.parse import parse_qsl
 
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from PIL import Image, UnidentifiedImageError
 
 from app.models import (
     ColoringBook,
     ColoringColorCode,
     ColoringPage,
     ColoringPagePhoto,
+    ColoringSuggestion,
     ColoringWork,
     TrackerUser,
     UserBook,
 )
+from app.tasks import send_suggestion_notification
 
 REPORT_LAUNCH_DATE = date(2026, 8, 1)
+SUGGESTION_COOLDOWN_SECONDS = 30
+SUGGESTION_TITLE_LIMIT = 500
+SUGGESTION_SOURCE_LIMIT = 100_000
+MAX_UPLOAD_BYTES = 12 * 1024 * 1024
 
 
 def media_url(request, field, updated_at=None):
@@ -36,6 +45,19 @@ def media_url(request, field, updated_at=None):
     # Keep this relative so media always use the current WebApp origin.
     url = field.url
     return f'{url}?v={int(updated_at.timestamp())}' if updated_at else url
+
+
+def validate_image_upload(upload):
+    if not upload or upload.size > MAX_UPLOAD_BYTES:
+        return 'Изображение должно быть не больше 12 МБ.'
+    try:
+        image = Image.open(upload)
+        image.verify()
+    except (UnidentifiedImageError, OSError):
+        return 'Не удалось распознать изображение. Выберите JPG, PNG или WebP.'
+    finally:
+        upload.seek(0)
+    return ''
 
 
 def webapp_index(request):
@@ -245,6 +267,90 @@ def tracker_catalog_book_detail(request, book_id):
     )
 
 
+def suggestion_fingerprint(title, source_text):
+    normalized = ' '.join(title.split()).casefold()
+    normalized_source = ' '.join(source_text.split()).casefold()
+    return hashlib.sha256(f'{normalized}\n{normalized_source}'.encode()).hexdigest()
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def tracker_suggestion(request):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Ожидается JSON.'}, status=400)
+
+    title = str(payload.get('title', '')).strip()
+    source_text = str(payload.get('source_text', '')).strip()
+    if not title:
+        return JsonResponse({'error': 'Напишите название раскраски.'}, status=400)
+    if len(title) > SUGGESTION_TITLE_LIMIT:
+        return JsonResponse(
+            {'error': f'Название слишком длинное (максимум {SUGGESTION_TITLE_LIMIT} символов).'},
+            status=400,
+        )
+    if len(source_text) > SUGGESTION_SOURCE_LIMIT:
+        return JsonResponse(
+            {'error': 'Текст ссылки слишком длинный. Укажите до 100 000 символов.'}, status=400
+        )
+
+    fingerprint = suggestion_fingerprint(title, source_text)
+    try:
+        with transaction.atomic():
+            locked_user = TrackerUser.objects.select_for_update().get(pk=user.pk)
+            cooldown_from = timezone.now() - timedelta(seconds=SUGGESTION_COOLDOWN_SECONDS)
+            last_suggestion = (
+                ColoringSuggestion.objects.filter(user=locked_user, created_at__gte=cooldown_from)
+                .order_by('-created_at')
+                .first()
+            )
+            if last_suggestion:
+                retry_after = max(
+                    1,
+                    SUGGESTION_COOLDOWN_SECONDS
+                    - int((timezone.now() - last_suggestion.created_at).total_seconds()),
+                )
+                return JsonResponse(
+                    {
+                        'error': f'Новое предложение можно отправить через {retry_after} сек.',
+                        'retry_after': retry_after,
+                    },
+                    status=429,
+                )
+            if ColoringSuggestion.objects.filter(
+                user=locked_user, fingerprint=fingerprint
+            ).exists():
+                return JsonResponse(
+                    {'error': 'Вы уже отправляли такое предложение. Спасибо, мы его проверяем.'},
+                    status=409,
+                )
+            suggestion = ColoringSuggestion.objects.create(
+                user=locked_user,
+                title=title,
+                source_text=source_text,
+                fingerprint=fingerprint,
+            )
+
+            def queue_notification(suggestion_id=suggestion.pk):
+                try:
+                    send_suggestion_notification.delay(suggestion_id)
+                except Exception as exc:
+                    ColoringSuggestion.objects.filter(pk=suggestion_id).update(
+                        notification_error=str(exc)[:4000], updated_at=timezone.now()
+                    )
+
+            transaction.on_commit(queue_notification)
+    except IntegrityError:
+        return JsonResponse(
+            {'error': 'Вы уже отправляли такое предложение. Спасибо, мы его проверяем.'}, status=409
+        )
+    return JsonResponse({'ok': True, 'id': suggestion.pk}, status=201)
+
+
 @csrf_exempt
 @require_http_methods(['DELETE'])
 def tracker_collection_book(request, book_id):
@@ -339,6 +445,8 @@ def tracker_work(request, user_book_id, page_id):
         except json.JSONDecodeError:
             pass
     if photo := request.FILES.get('photo'):
+        if error := validate_image_upload(photo):
+            return JsonResponse({'error': error}, status=400)
         page_photo, _ = ColoringPagePhoto.objects.get_or_create(user_book=user_book, page=page)
         page_photo.image = photo
         page_photo.save()
@@ -367,6 +475,8 @@ def tracker_color_code(request, user_book_id, page_id):
     image = request.FILES.get('image')
     if not image:
         return JsonResponse({'error': 'Выберите изображение цветового кода.'}, status=400)
+    if error := validate_image_upload(image):
+        return JsonResponse({'error': error}, status=400)
     if color_code:
         color_code.image = image
         color_code.save(update_fields=('image', 'updated_at'))

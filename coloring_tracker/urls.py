@@ -10,6 +10,7 @@ urlpatterns = [
     path('api/tracker/books/', views.tracker_books),
     path('api/tracker/catalog/', views.tracker_catalog),
     path('api/tracker/catalog/<int:book_id>/', views.tracker_catalog_book_detail),
+    path('api/tracker/suggestions/', views.tracker_suggestion),
     path('api/tracker/profile/', views.tracker_profile),
     path('api/tracker/catalog/<int:book_id>/collection/', views.tracker_collection_book),
     path('api/tracker/books/<int:user_book_id>/', views.tracker_book_detail),

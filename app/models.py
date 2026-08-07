@@ -178,3 +178,30 @@ class ColoringColorCode(TimestampedModel):
 
     def __str__(self):
         return f'{self.user_book}: стр. {self.page.label}'
+
+
+class ColoringSuggestion(TimestampedModel):
+    """A catalogue suggestion submitted by a Telegram user."""
+
+    user = models.ForeignKey(TrackerUser, on_delete=models.PROTECT, related_name='suggestions')
+    title = models.CharField('Название раскраски', max_length=500)
+    source_text = models.TextField('Ссылка или источник', blank=True)
+    fingerprint = models.CharField('Отпечаток', max_length=64)
+    notification_sent_at = models.DateTimeField('Уведомление отправлено', null=True, blank=True)
+    notification_error = models.TextField('Ошибка уведомления', blank=True)
+    admin_reply = models.TextField('Ответ пользователю', blank=True)
+    reply_sent_at = models.DateTimeField('Ответ отправлен', null=True, blank=True)
+    reply_error = models.TextField('Ошибка ответа', blank=True)
+
+    class Meta:
+        verbose_name = 'Предложение раскраски'
+        verbose_name_plural = 'Предложения раскрасок'
+        ordering = ('-created_at',)
+        constraints = [
+            models.UniqueConstraint(
+                fields=('user', 'fingerprint'), name='unique_user_coloring_suggestion'
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.title} — {self.user}'
