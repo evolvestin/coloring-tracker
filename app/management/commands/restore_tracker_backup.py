@@ -109,6 +109,25 @@ class Command(BaseCommand):
                 try:
                     subprocess.run(
                         [
+                            'psql',
+                            '--no-psqlrc',
+                            '--set=ON_ERROR_STOP=on',
+                            '--host',
+                            database['HOST'],
+                            '--port',
+                            str(database['PORT']),
+                            '--username',
+                            database['USER'],
+                            '--dbname',
+                            database['NAME'],
+                            '--command',
+                            'DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;',
+                        ],
+                        check=True,
+                        env=restore_environment,
+                    )
+                    subprocess.run(
+                        [
                             'pg_restore',
                             '--clean',
                             '--if-exists',
@@ -130,11 +149,13 @@ class Command(BaseCommand):
                     )
                 except FileNotFoundError as error:
                     raise CommandError(
-                        'pg_restore is not installed in this environment.'
+                        'PostgreSQL client tools (psql/pg_restore) are not installed in this '
+                        'environment.'
                     ) from error
                 except subprocess.CalledProcessError as error:
                     raise CommandError(
-                        f'pg_restore failed with exit code {error.returncode}.'
+                        f'PostgreSQL schema reset or pg_restore failed with exit code '
+                        f'{error.returncode}.'
                     ) from error
         finally:
             backup_file.unlink(missing_ok=True)

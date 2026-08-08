@@ -18,4 +18,4 @@ COPY . .
 COPY --from=frontend /build/dist ./frontend_webapp/dist
 RUN mkdir -p /app/data && chown -R app:app /app
 USER app
-CMD ["gunicorn", "coloring_tracker.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["gunicorn", "coloring_tracker.wsgi:application", "--bind", "0.0.0.0:8000", "--worker-class", "gthread", "--workers", "2", "--threads", "4", "--timeout", "60", "--keep-alive", "5"]

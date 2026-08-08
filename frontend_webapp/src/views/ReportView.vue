@@ -116,7 +116,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeMonthPick
     <p v-if="loading && !report" class="muted">Загружаем отчёт…</p>
     <template v-else-if="report?.month">
       <div class="report-card">
-        <div class="report-total"><b>{{ report.total }}</b><span>Раскрашено {{ formatCount(report.total, 'page') }}</span></div>
+        <div class="report-total"><b>{{ report.total }}</b><span>Готово {{ formatCount(report.total, 'work') }}</span></div>
         <div class="chips"><span>🌷 {{ formatCount(report.active_days, 'day') }} активности</span><span>✨ Лучший день: {{ formatCount(report.best_day, 'work') }}</span><span>📚 {{ formatCount(Object.keys(report.books).length, 'book') }}</span></div>
         <h3>Активность</h3>
         <div class="week"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>

@@ -78,9 +78,11 @@ services:
     command: >-
       sh -c 'case "$$(echo "$$VITE_DEV_MODE" | tr "[:upper:]" "[:lower:]")" in
       true|1|yes) exec gunicorn coloring_tracker.wsgi:application
-      --bind 0.0.0.0:$${WEB_PORT:-8022} --reload ;;
+      --bind 0.0.0.0:$${WEB_PORT:-8022} --worker-class gthread --workers 2 --threads 4
+      --timeout 60 --keep-alive 5 --reload ;;
       *) exec gunicorn coloring_tracker.wsgi:application
-      --bind 0.0.0.0:$${WEB_PORT:-8022} ;;
+      --bind 0.0.0.0:$${WEB_PORT:-8022} --worker-class gthread --workers 2 --threads 4
+      --timeout 60 --keep-alive 5 ;;
       esac'
     ports:
       - "${WEB_PORT:-8022}:${WEB_PORT:-8022}"

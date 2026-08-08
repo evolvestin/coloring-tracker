@@ -1,0 +1,79 @@
+.telegram-reply-editor {
+  max-width: 760px;
+}
+
+.telegram-reply-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid #cfd6de;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: #f7f9fb;
+}
+
+.telegram-reply-toolbar button {
+  min-width: 34px;
+  padding: 6px 9px;
+  border: 1px solid #c7d0d9;
+  border-radius: 5px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.telegram-reply-toolbar button:hover,
+.telegram-reply-toolbar button:focus-visible {
+  border-color: #4177a9;
+  background: #eaf3fb;
+  outline: 0;
+}
+
+.telegram-reply-editor textarea {
+  display: block;
+  width: 100%;
+  min-height: 180px;
+  border-radius: 0 0 6px 6px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.telegram-reply-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 2px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.telegram-reply-preview {
+  min-height: 54px;
+  padding: 12px 14px;
+  border: 1px solid #d8e1ea;
+  border-radius: 7px;
+  background: #f1f7fc;
+  color: #243b53;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.telegram-reply-preview pre,
+.telegram-reply-preview code {
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: #dcebf7;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.telegram-reply-preview pre {
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+.telegram-reply-placeholder {
+  color: #8a98a8;
+}

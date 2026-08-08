@@ -9,6 +9,8 @@ def delete_page_photo(sender, instance, **kwargs):
     """Remove a page photo only when the independent photo record is removed."""
     if instance.image:
         instance.image.delete(save=False)
+    if instance.original_image:
+        instance.original_image.delete(save=False)
 
 
 @receiver(post_delete, sender=ColoringColorCode)
@@ -16,3 +18,5 @@ def delete_color_code_image(sender, instance, **kwargs):
     """Remove the uploaded palette image with its database record."""
     if instance.image:
         instance.image.delete(save=False)
+    if instance.original_image:
+        instance.original_image.delete(save=False)

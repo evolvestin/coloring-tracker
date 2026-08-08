@@ -1,0 +1,61 @@
+.flower-icon-picker {
+  max-width: 760px;
+}
+
+.flower-icon-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 8px;
+}
+
+.flower-icon-option {
+  min-height: 72px;
+  padding: 7px 4px 5px;
+  border: 1px solid #d8dde3;
+  border-radius: 8px;
+  background: #fff;
+  color: #52606d;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+
+.flower-icon-option:hover,
+.flower-icon-option:focus-visible {
+  border-color: #79a9d8;
+  outline: 0;
+  box-shadow: 0 0 0 3px #79a9d833;
+}
+
+.flower-icon-option.is-unused {
+  border-color: #8fcf9b;
+  background: #effbf1;
+  color: #26743a;
+}
+
+.flower-icon-option.is-selected {
+  border-color: #4177a9;
+  background: #eaf3fb;
+  box-shadow: 0 0 0 2px #4177a944;
+}
+
+.flower-icon-glyph {
+  display: block;
+  min-height: 32px;
+  font-size: 27px;
+  line-height: 32px;
+}
+
+.flower-icon-option small {
+  display: block;
+  min-height: 14px;
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.flower-icon-help {
+  margin: 9px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+}

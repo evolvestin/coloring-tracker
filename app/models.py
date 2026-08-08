@@ -22,6 +22,17 @@ FLOWER_ICONS = (
     '🌿',
     '🍃',
     '🦋',
+    '🌱',
+    '🌲',
+    '🌳',
+    '🌴',
+    '🌵',
+    '🎋',
+    '🎍',
+    '🍁',
+    '🍂',
+    '🍄',
+    '🌰',
 )
 FLOWER_ICON_CHOICES = [(icon, icon) for icon in FLOWER_ICONS]
 
@@ -52,12 +63,23 @@ class TrackerUser(TimestampedModel):
 
 
 class ColoringBook(TimestampedModel):
-    """A book maintained exclusively through the Django admin catalogue."""
+    """A catalogue book or a private book created by one tracker user."""
 
     title = models.CharField('Название', max_length=255)
+    owner = models.ForeignKey(
+        TrackerUser,
+        on_delete=models.CASCADE,
+        related_name='personal_coloring_books',
+        null=True,
+        blank=True,
+        verbose_name='Владелец личной раскраски',
+    )
     author = models.CharField('Автор', max_length=255, blank=True)
     publisher = models.CharField('Издательство', max_length=255, blank=True)
     cover = models.ImageField('Обложка', upload_to='books/covers/', blank=True)
+    cover_original = models.ImageField(
+        'Исходник обложки', upload_to='books/cover-originals/', blank=True
+    )
     description = models.TextField('Описание', blank=True)
     is_published = models.BooleanField('Опубликована', default=True)
     report_icon = models.CharField(
@@ -71,6 +93,10 @@ class ColoringBook(TimestampedModel):
 
     def __str__(self):
         return self.title
+
+    @property
+    def is_personal(self):
+        return self.owner_id is not None
 
     @property
     def total_pages_count(self):
@@ -150,6 +176,9 @@ class ColoringPagePhoto(TimestampedModel):
     user_book = models.ForeignKey(UserBook, on_delete=models.CASCADE, related_name='page_photos')
     page = models.ForeignKey(ColoringPage, on_delete=models.CASCADE, related_name='page_photos')
     image = models.ImageField('Фото работы', upload_to='works/%Y/%m/')
+    original_image = models.ImageField(
+        'Исходник фото работы', upload_to='works/originals/%Y/%m/', blank=True
+    )
 
     class Meta:
         verbose_name = 'Фото работы'
@@ -168,6 +197,9 @@ class ColoringColorCode(TimestampedModel):
     user_book = models.ForeignKey(UserBook, on_delete=models.CASCADE, related_name='color_codes')
     page = models.ForeignKey(ColoringPage, on_delete=models.CASCADE, related_name='color_codes')
     image = models.ImageField('Цветовой код', upload_to='color-codes/%Y/%m/')
+    original_image = models.ImageField(
+        'Исходник цветового кода', upload_to='color-codes/originals/%Y/%m/', blank=True
+    )
 
     class Meta:
         verbose_name = 'Цветовой код'

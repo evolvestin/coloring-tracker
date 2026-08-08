@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
   file: { type: Object, required: true },
@@ -13,6 +13,7 @@ const image = new Image()
 const imageSrc = URL.createObjectURL(props.file)
 const loaded = ref(false)
 const rotation = ref(0)
+const zoom = ref(1)
 const crop = ref({ x: 0, y: 0, width: 0, height: 0 })
 const display = ref({ left: 0, top: 0, width: 0, height: 0, scale: 1 })
 const stageSize = ref({ width: 0, height: 0 })
@@ -44,7 +45,8 @@ function drawPreview() {
   const size = rotatedSize()
   const bounds = stage.value.getBoundingClientRect()
   stageSize.value = { width: bounds.width, height: bounds.height }
-  const scale = Math.min((bounds.width - 24) / size.width, (bounds.height - 24) / size.height)
+  const baseScale = Math.min((bounds.width - 24) / size.width, (bounds.height - 24) / size.height)
+  const scale = baseScale * zoom.value
   const width = size.width * scale
   const height = size.height * scale
   display.value = {
@@ -94,13 +96,10 @@ function beginCrop(event) {
   ) return
   const point = imagePoint(event)
   const handle = event.target.closest?.('[data-handle]')?.dataset.handle
-  const c = crop.value
-  const outside = point.x < c.x || point.x > c.x + c.width || point.y < c.y || point.y > c.y + c.height
-  if (!handle && outside) {
-    crop.value = { x: point.x, y: point.y, width: 1, height: 1 }
-  }
   drag.value = {
-    mode: handle || (outside ? 'new' : 'move'),
+    // A tap outside the selection should move the existing selection. Creating
+    // a new 1×1 selection here made an accidental tap destroy the crop.
+    mode: handle || 'move',
     start: point,
     initial: { ...crop.value },
   }
@@ -146,7 +145,14 @@ function rotate() {
   nextTick(drawPreview)
 }
 
-function reset() { rotation.value = 0; resetCrop(); nextTick(drawPreview) }
+function changeZoom(event) {
+  zoom.value = Number(event.target.value)
+  nextTick(drawPreview)
+}
+
+const zoomPercent = computed(() => `${Math.round(zoom.value * 100)}%`)
+
+function reset() { rotation.value = 0; zoom.value = 1; resetCrop(); nextTick(drawPreview) }
 
 function save() {
   if (saving.value || !loaded.value) return
@@ -170,7 +176,7 @@ function save() {
   const mime = props.file.type === 'image/png' ? 'image/png' : 'image/jpeg'
   output.toBlob((blob) => {
     saving.value = false
-    if (blob) emit('save', blob)
+    if (blob) emit('save', { blob, sourceFile: props.file })
   }, mime, 0.92)
 }
 
@@ -201,12 +207,18 @@ onBeforeUnmount(() => {
         <div><p class="eyebrow">ПОДГОТОВКА ФОТО</p><h2>{{ title }}</h2></div>
         <button class="modal-close" aria-label="Закрыть редактор" @click="emit('cancel')">×</button>
       </header>
-      <p class="image-editor-hint">Выделите нужную область и поверните снимок по часовой стрелке. Результат сохранится сразу.</p>
+      <p class="image-editor-hint">Меняйте масштаб, выделите нужную область и поверните снимок по часовой стрелке. Результат сохранится сразу.</p>
       <div ref="stage" class="image-editor-stage" @pointerdown="beginCrop" @pointermove="updateCrop" @pointerup="endCrop" @pointercancel="endCrop">
         <canvas ref="canvas" class="image-editor-canvas" :style="{ left: `${display.left}px`, top: `${display.top}px`, width: `${display.width}px`, height: `${display.height}px` }"></canvas>
         <div v-if="loaded" class="crop-selection" :style="cropStyle()" @pointerdown.stop="beginCrop">
           <i v-for="handle in ['nw', 'ne', 'sw', 'se']" :key="handle" :data-handle="handle" :class="['crop-handle', `crop-handle-${handle}`]"></i>
         </div>
+      </div>
+      <div class="image-editor-zoom">
+        <button class="secondary" type="button" aria-label="Уменьшить масштаб" @click="zoom = Math.max(1, +(zoom - 0.1).toFixed(1)); drawPreview()">−</button>
+        <label>Масштаб <input :value="zoom" type="range" min="1" max="3" step="0.1" aria-label="Масштаб изображения" @input="changeZoom"></label>
+        <output>{{ zoomPercent }}</output>
+        <button class="secondary" type="button" aria-label="Увеличить масштаб" @click="zoom = Math.min(3, +(zoom + 0.1).toFixed(1)); drawPreview()">＋</button>
       </div>
       <div class="image-editor-actions">
         <button class="secondary" type="button" @click="rotate">↻ Повернуть</button>

@@ -20,6 +20,7 @@ from django.views.decorators.http import require_http_methods
 from PIL import Image, UnidentifiedImageError
 
 from app.models import (
+    FLOWER_ICONS,
     ColoringBook,
     ColoringColorCode,
     ColoringPage,
@@ -36,6 +37,8 @@ SUGGESTION_COOLDOWN_SECONDS = 30
 SUGGESTION_TITLE_LIMIT = 500
 SUGGESTION_SOURCE_LIMIT = 100_000
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
+PERSONAL_BOOK_TITLE_LIMIT = 255
+PERSONAL_PAGE_LIMIT = 300
 
 
 def media_url(request, field, updated_at=None):
@@ -180,9 +183,16 @@ def book_data(user_book):
         'title': user_book.book.title,
         'author': user_book.book.author,
         'cover': user_book.book.cover.url if user_book.book.cover else '',
+        'cover_source': (
+            user_book.book.cover_original.url
+            if user_book.book.cover_original
+            else (user_book.book.cover.url if user_book.book.cover else '')
+        ),
         'total': total,
         'done': completed,
         'progress': round(completed * 100 / total) if total else 0,
+        'is_personal': user_book.book.is_personal,
+        'emoji': user_book.book.report_icon if user_book.book.is_personal else '',
     }
 
 
@@ -199,7 +209,9 @@ def tracker_books(request):
             return JsonResponse(
                 {'error': 'Ожидается JSON с идентификатором раскраски.'}, status=400
             )
-        book = get_object_or_404(ColoringBook, pk=payload.get('book_id'), is_published=True)
+        book = get_object_or_404(
+            ColoringBook, pk=payload.get('book_id'), owner__isnull=True, is_published=True
+        )
         user_book, _ = UserBook.objects.get_or_create(book=book, user=user)
         return JsonResponse({'book': book_data(user_book)}, status=201)
     return JsonResponse({'books': [book_data(item) for item in user_books(request)]})
@@ -211,7 +223,9 @@ def tracker_catalog(request):
     owned = set(user_books(request).values_list('book_id', flat=True)) if user else set()
     collection = {item.book_id: item for item in user_books(request)} if user else {}
     query = request.GET.get('q', '').strip()
-    catalogue = ColoringBook.objects.filter(is_published=True).prefetch_related('pages')
+    catalogue = ColoringBook.objects.filter(owner__isnull=True, is_published=True).prefetch_related(
+        'pages'
+    )
     if query:
         catalogue = catalogue.filter(
             Q(title__icontains=query) | Q(author__icontains=query) | Q(publisher__icontains=query)
@@ -240,7 +254,9 @@ def tracker_catalog(request):
 def tracker_catalog_book_detail(request, book_id):
     """Published catalogue entry preview, available before it is collected."""
     book = get_object_or_404(
-        ColoringBook.objects.prefetch_related('pages'), pk=book_id, is_published=True
+        ColoringBook.objects.filter(owner__isnull=True).prefetch_related('pages'),
+        pk=book_id,
+        is_published=True,
     )
     return JsonResponse(
         {
@@ -357,10 +373,339 @@ def tracker_collection_book(request, book_id):
     user = tracker_identity(request)
     if not user:
         return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
-    user_book = get_object_or_404(UserBook, user=user, book_id=book_id)
+    user_book = get_object_or_404(UserBook, user=user, book_id=book_id, book__owner__isnull=True)
     deleted_works = user_book.works.count()
     user_book.delete()
     return JsonResponse({'ok': True, 'deleted_works': deleted_works})
+
+
+def personal_user_book(request, user_book_id):
+    user = tracker_identity(request)
+    if not user:
+        return None
+    return get_object_or_404(
+        UserBook.objects.select_related('book'),
+        pk=user_book_id,
+        user=user,
+        book__owner=user,
+    )
+
+
+def personal_page_payload(payload):
+    if not isinstance(payload, dict):
+        raise ValueError('Страница должна быть объектом.')
+    raw_number = payload.get('number')
+    if isinstance(raw_number, bool) or (
+        isinstance(raw_number, float) and not raw_number.is_integer()
+    ):
+        raise ValueError('Укажите целый номер страницы.')
+    try:
+        number = int(raw_number)
+    except (TypeError, ValueError):
+        raise ValueError('Укажите номер страницы.') from None
+    if number < 1:
+        raise ValueError('Номер страницы должен быть положительным.')
+    spread_end = payload.get('spread_end')
+    if spread_end in ('', None):
+        spread_end = None
+    else:
+        if isinstance(spread_end, bool) or (
+            isinstance(spread_end, float) and not spread_end.is_integer()
+        ):
+            raise ValueError('Последняя страница разворота должна быть целым числом.')
+        try:
+            spread_end = int(spread_end)
+        except (TypeError, ValueError):
+            raise ValueError('Последняя страница разворота должна быть числом.') from None
+        if spread_end != number + 1:
+            raise ValueError('Разворот должен состоять ровно из двух соседних страниц.')
+    title = str(payload.get('title', '')).strip()
+    if len(title) > 255:
+        raise ValueError('Подпись страницы слишком длинная.')
+    return {'number': number, 'spread_end': spread_end, 'title': title}
+
+
+def order_personal_pages(page_payloads):
+    """Use the submitted row order as truth and assign page numbers server-side."""
+    if not isinstance(page_payloads, list):
+        raise ValueError('Список страниц должен быть массивом.')
+    ordered = []
+    next_number = 1
+    for item in page_payloads:
+        if not isinstance(item, dict):
+            raise ValueError('Страница должна быть объектом.')
+        raw_spread_end = item.get('spread_end')
+        if raw_spread_end not in ('', None, False):
+            raw_number = item.get('number')
+            try:
+                if int(raw_spread_end) != int(raw_number) + 1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise ValueError(
+                    'Разворот должен состоять ровно из двух соседних страниц.'
+                ) from None
+            spread_end = next_number + 1
+        else:
+            spread_end = None
+        ordered.append({**item, 'number': next_number, 'spread_end': spread_end})
+        next_number += 2 if spread_end else 1
+    return ordered
+
+
+def validate_personal_pages(book, page_payloads, *, include_existing=True, allow_empty=False):
+    if not isinstance(page_payloads, list):
+        raise ValueError('Список страниц должен быть массивом.')
+    if not page_payloads and not allow_empty:
+        raise ValueError('Добавьте хотя бы одну страницу.')
+    pages = [personal_page_payload(item) for item in page_payloads]
+    intervals = []
+    total_pages = 0
+    if include_existing:
+        existing_pages = list(book.pages.all())
+        intervals.extend((page.number, page.spread_end or page.number) for page in existing_pages)
+        total_pages += sum(page.page_count for page in existing_pages)
+    intervals.extend((item['number'], item['spread_end'] or item['number']) for item in pages)
+    total_pages += sum(2 if item['spread_end'] else 1 for item in pages)
+    if total_pages > PERSONAL_PAGE_LIMIT:
+        raise ValueError(f'В личной раскраске может быть не больше {PERSONAL_PAGE_LIMIT} страниц.')
+    intervals.sort()
+    for previous, current in zip(intervals, intervals[1:], strict=True):
+        if current[0] <= previous[1]:
+            raise ValueError('Страницы и развороты не должны пересекаться.')
+    return pages
+
+
+def replace_personal_pages(book, page_payloads):
+    """Replace the complete page list while keeping data for unchanged rows."""
+    if not isinstance(page_payloads, list):
+        raise ValueError('Список страниц должен быть массивом.')
+
+    page_ids = [
+        item.get('id') for item in page_payloads if isinstance(item, dict) and item.get('id')
+    ]
+    if len(page_ids) != len(set(page_ids)):
+        raise ValueError('Строки страниц должны быть уникальными.')
+    existing = {page.id: page for page in book.pages.all()}
+    unknown_ids = set(page_ids) - set(existing)
+    if unknown_ids:
+        raise ValueError('Некоторые страницы не принадлежат этой раскраске.')
+
+    page_payloads = order_personal_pages(page_payloads)
+    pages = validate_personal_pages(book, page_payloads, include_existing=False, allow_empty=True)
+    kept_ids = set(page_ids)
+    removed = [page for page_id, page in existing.items() if page_id not in kept_ids]
+    for page in removed:
+        page.delete()
+
+    # UniqueConstraint(book, number) makes swapping numbers unsafe when rows are
+    # updated one by one. Move retained rows out of the way first.
+    temporary_number = (
+        max(
+            [1_000_000]
+            + [page.number for page in existing.values()]
+            + [page.spread_end or page.number for page in existing.values()]
+            + [item['number'] for item in pages]
+            + [item['spread_end'] or item['number'] for item in pages]
+        )
+        + len(existing)
+        + 1
+    )
+    retained = [existing[page_id] for page_id in page_ids]
+    for offset, page in enumerate(retained):
+        page.number = temporary_number + offset
+        page.spread_end = None
+        page.save(update_fields=('number', 'spread_end', 'updated_at'))
+
+    for payload, page_data in zip(page_payloads, pages, strict=True):
+        page = existing.get(payload.get('id'))
+        if page is None:
+            ColoringPage.objects.create(book=book, **page_data)
+            continue
+        page.number = page_data['number']
+        page.spread_end = page_data['spread_end']
+        page.title = page_data['title']
+        page.save(update_fields=('number', 'spread_end', 'title', 'updated_at'))
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def tracker_personal_book_create(request):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    if request.content_type.startswith('multipart/form-data'):
+        try:
+            pages = json.loads(request.POST.get('pages', '[]'))
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Не удалось прочитать список страниц.'}, status=400)
+        payload = {
+            'title': request.POST.get('title', ''),
+            'emoji': request.POST.get('emoji', ''),
+            'pages': pages,
+        }
+        cover = request.FILES.get('cover')
+        cover_original = request.FILES.get('cover_original')
+    else:
+        try:
+            payload = json.loads(request.body or '{}')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Ожидается JSON.'}, status=400)
+        cover = None
+        cover_original = None
+    title = str(payload.get('title', '')).strip()
+    emoji = str(payload.get('emoji', '')).strip()
+    if not title:
+        return JsonResponse({'error': 'Введите название раскраски.'}, status=400)
+    if len(title) > PERSONAL_BOOK_TITLE_LIMIT:
+        return JsonResponse({'error': 'Название раскраски слишком длинное.'}, status=400)
+    if emoji not in FLOWER_ICONS:
+        return JsonResponse({'error': 'Выберите эмодзи раскраски.'}, status=400)
+    if cover and (error := validate_image_upload(cover)):
+        return JsonResponse({'error': error}, status=400)
+    if cover_original and (error := validate_image_upload(cover_original)):
+        return JsonResponse({'error': error}, status=400)
+    try:
+        payload['pages'] = order_personal_pages(payload.get('pages', []))
+        pages = validate_personal_pages(
+            ColoringBook(), payload.get('pages', []), include_existing=False, allow_empty=True
+        )
+        with transaction.atomic():
+            book = ColoringBook.objects.create(
+                owner=user,
+                title=title,
+                report_icon=emoji,
+                cover=cover,
+                cover_original=cover_original or cover,
+                is_published=False,
+            )
+            ColoringPage.objects.bulk_create([ColoringPage(book=book, **page) for page in pages])
+            user_book = UserBook.objects.create(user=user, book=book)
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    return JsonResponse({'book': book_data(user_book)}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(['PATCH', 'DELETE'])
+def tracker_personal_book(request, user_book_id):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    user_book = get_object_or_404(
+        UserBook.objects.select_related('book'), pk=user_book_id, user=user, book__owner=user
+    )
+    if request.method == 'DELETE':
+        user_book.book.delete()
+        return JsonResponse({'ok': True})
+    if request.content_type.startswith('multipart/form-data'):
+        payload = {
+            'title': request.POST.get('title', user_book.book.title),
+            'emoji': request.POST.get('emoji', user_book.book.report_icon),
+        }
+        cover = request.FILES.get('cover')
+        cover_original = request.FILES.get('cover_original')
+        remove_cover = request.POST.get('remove_cover') in ('1', 'true', 'True')
+    else:
+        try:
+            payload = json.loads(request.body or '{}')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Ожидается JSON.'}, status=400)
+        cover = None
+        cover_original = None
+        remove_cover = False
+    title = str(payload.get('title', user_book.book.title)).strip()
+    emoji = str(payload.get('emoji', user_book.book.report_icon)).strip()
+    if not title or len(title) > PERSONAL_BOOK_TITLE_LIMIT:
+        return JsonResponse({'error': 'Введите название до 255 символов.'}, status=400)
+    if emoji not in FLOWER_ICONS:
+        return JsonResponse({'error': 'Выберите эмодзи раскраски.'}, status=400)
+    if cover and (error := validate_image_upload(cover)):
+        return JsonResponse({'error': error}, status=400)
+    if cover_original and (error := validate_image_upload(cover_original)):
+        return JsonResponse({'error': error}, status=400)
+    try:
+        with transaction.atomic():
+            book = ColoringBook.objects.select_for_update().get(pk=user_book.book_id)
+            if 'pages' in payload:
+                replace_personal_pages(book, payload['pages'])
+            book.title = title
+            book.report_icon = emoji
+            update_fields = ['title', 'report_icon']
+            if remove_cover:
+                book.cover = ''
+                book.cover_original = ''
+                update_fields.extend(('cover', 'cover_original'))
+            elif cover:
+                book.cover = cover
+                # Keep the uncropped source when a legacy client sends only
+                # the processed cover. New editor uploads still replace it
+                # explicitly through cover_original.
+                book.cover_original = cover_original or book.cover_original or cover
+                update_fields.extend(('cover', 'cover_original'))
+            book.save(update_fields=(*update_fields, 'updated_at'))
+            user_book.book = book
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    return JsonResponse({'book': book_data(user_book)})
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def tracker_personal_pages(request, user_book_id):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    user_book = get_object_or_404(
+        UserBook.objects.select_related('book'), pk=user_book_id, user=user, book__owner=user
+    )
+    try:
+        payload = json.loads(request.body or '{}')
+        with transaction.atomic():
+            book = ColoringBook.objects.select_for_update().get(pk=user_book.book_id)
+            # Keep the old endpoint safe for cached clients: validate the
+            # requested slot, then append the new row after the current list.
+            validate_personal_pages(book, [payload], include_existing=True)
+            last_number = max(
+                (page.spread_end or page.number for page in book.pages.all()),
+                default=0,
+            )
+            payload = {
+                **payload,
+                'number': last_number + 1,
+                'spread_end': last_number + 2
+                if payload.get('spread_end') not in ('', None, False)
+                else None,
+            }
+            pages = validate_personal_pages(book, [payload], include_existing=True)
+            page = ColoringPage.objects.create(book=book, **pages[0])
+    except (json.JSONDecodeError, ValueError) as exc:
+        return JsonResponse({'error': str(exc) or 'Ожидается JSON.'}, status=400)
+    return JsonResponse(
+        {
+            'page': {
+                'id': page.id,
+                'number': page.number,
+                'spread_end': page.spread_end,
+                'label': page.label,
+                'title': page.title,
+            }
+        },
+        status=201,
+    )
+
+
+@csrf_exempt
+@require_http_methods(['DELETE'])
+def tracker_personal_page(request, user_book_id, page_id):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    user_book = get_object_or_404(
+        UserBook.objects.select_related('book'), pk=user_book_id, user=user, book__owner=user
+    )
+    page = get_object_or_404(ColoringPage, pk=page_id, book=user_book.book)
+    page.delete()
+    return JsonResponse({'ok': True})
 
 
 @require_http_methods(['GET'])
@@ -369,7 +714,9 @@ def tracker_profile(request):
     if not user:
         return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
     books = user_books(request)
-    total = sum(item.book.total_pages_count for item in books)
+    # A spread is one trackable work, even though it contains two physical pages.
+    # Keep the profile aggregate consistent with book_data() and the monthly report.
+    total = sum(item.book.pages.count() for item in books)
     completed = ColoringWork.objects.filter(user_book__in=books).count()
     return JsonResponse(
         {
@@ -383,9 +730,7 @@ def tracker_profile(request):
                 'books': books.count(),
                 'completed': completed,
                 'total': total,
-                'progress': round(completed * 100 / sum(item.book.pages.count() for item in books))
-                if books
-                else 0,
+                'progress': round(completed * 100 / total) if total else 0,
             },
         }
     )
@@ -413,8 +758,22 @@ def tracker_book_detail(request, user_book_id):
             )
             if page.id in photos_by_page
             else '',
+            'photo_source': media_url(
+                request,
+                photos_by_page[page.id].original_image or photos_by_page[page.id].image,
+                photos_by_page[page.id].updated_at,
+            )
+            if page.id in photos_by_page
+            else '',
             'color_code': media_url(
                 request, color_codes_by_page[page.id].image, color_codes_by_page[page.id].updated_at
+            )
+            if page.id in color_codes_by_page
+            else '',
+            'color_code_source': media_url(
+                request,
+                color_codes_by_page[page.id].original_image or color_codes_by_page[page.id].image,
+                color_codes_by_page[page.id].updated_at,
             )
             if page.id in color_codes_by_page
             else '',
@@ -447,8 +806,12 @@ def tracker_work(request, user_book_id, page_id):
     if photo := request.FILES.get('photo'):
         if error := validate_image_upload(photo):
             return JsonResponse({'error': error}, status=400)
+        source_photo = request.FILES.get('source_photo')
+        if source_photo and (error := validate_image_upload(source_photo)):
+            return JsonResponse({'error': error}, status=400)
         page_photo, _ = ColoringPagePhoto.objects.get_or_create(user_book=user_book, page=page)
         page_photo.image = photo
+        page_photo.original_image = source_photo or photo
         page_photo.save()
     page_photo = ColoringPagePhoto.objects.filter(user_book=user_book, page=page).first()
     return JsonResponse(
@@ -456,6 +819,13 @@ def tracker_work(request, user_book_id, page_id):
             'id': work.id,
             'hide_in_report': work.hide_in_report,
             'photo': media_url(request, page_photo.image, page_photo.updated_at)
+            if page_photo
+            else '',
+            'photo_source': media_url(
+                request,
+                page_photo.original_image or page_photo.image,
+                page_photo.updated_at,
+            )
             if page_photo
             else '',
         }
@@ -477,15 +847,29 @@ def tracker_color_code(request, user_book_id, page_id):
         return JsonResponse({'error': 'Выберите изображение цветового кода.'}, status=400)
     if error := validate_image_upload(image):
         return JsonResponse({'error': error}, status=400)
+    source_image = request.FILES.get('source_image')
+    if source_image and (error := validate_image_upload(source_image)):
+        return JsonResponse({'error': error}, status=400)
     if color_code:
         color_code.image = image
-        color_code.save(update_fields=('image', 'updated_at'))
+        color_code.original_image = source_image or image
+        color_code.save(update_fields=('image', 'original_image', 'updated_at'))
     else:
-        color_code = ColoringColorCode.objects.create(user_book=user_book, page=page, image=image)
+        color_code = ColoringColorCode.objects.create(
+            user_book=user_book,
+            page=page,
+            image=image,
+            original_image=source_image or image,
+        )
     return JsonResponse(
         {
             'id': color_code.id,
             'image': media_url(request, color_code.image, color_code.updated_at),
+            'image_source': media_url(
+                request,
+                color_code.original_image or color_code.image,
+                color_code.updated_at,
+            ),
         }
     )
 
