@@ -3,6 +3,7 @@ import json
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.db.models import Case, IntegerField, Prefetch, Value, When
 from django.forms.utils import flatatt
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
@@ -133,6 +134,24 @@ class ColoringPageInline(admin.TabularInline):
     template = 'admin/app/coloringpage/tabular.html'
 
 
+class ColoringBookOriginFilter(admin.SimpleListFilter):
+    title = 'Источник раскраски'
+    parameter_name = 'origin'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('admin', 'Добавлена администратором'),
+            ('user', 'Добавлена пользователем'),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == 'admin':
+            return queryset.filter(owner__isnull=True)
+        if self.value() == 'user':
+            return queryset.filter(owner__isnull=False)
+        return queryset
+
+
 def pluralize_ru(count, one, two, many):
     n = abs(count) % 100
     n1 = n % 10
@@ -150,6 +169,7 @@ class ColoringBookAdmin(admin.ModelAdmin):
     form = ColoringBookAdminForm
     change_form_template = 'admin/app/coloringbook/change_form.html'
     list_display = (
+        'source_badge',
         'title',
         'owner',
         'report_icon',
@@ -158,12 +178,41 @@ class ColoringBookAdmin(admin.ModelAdmin):
         'is_published',
         'page_count',
     )
-    list_filter = ('is_published',)
+    list_filter = (ColoringBookOriginFilter, 'is_published')
     search_fields = ('title', 'author', 'publisher', 'owner__display_name', 'owner__username')
     inlines = (ColoringPageInline,)
 
+    class Media:
+        css = {'all': ('app/admin/tracker-admin.css',)}
+
     def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related('pages')
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                _source_order=Case(
+                    When(owner__isnull=True, then=Value(0)),
+                    default=Value(1),
+                    output_field=IntegerField(),
+                )
+            )
+            .prefetch_related('pages')
+        )
+
+    def get_ordering(self, request):
+        if request.GET.get('o'):
+            return super().get_ordering(request)
+        return ('_source_order', 'title', 'pk')
+
+    @admin.display(description='Источник')
+    def source_badge(self, book):
+        if book.owner_id:
+            return format_html(
+                '<span class="tracker-source-badge tracker-source-badge--user">ПОЛЬЗОВАТЕЛЬ</span>'
+            )
+        return format_html(
+            '<span class="tracker-source-badge tracker-source-badge--admin">АДМИНИСТРАТОР</span>'
+        )
 
     def get_urls(self):
         urls = super().get_urls()
@@ -271,8 +320,6 @@ class ColoringSuggestionAdmin(admin.ModelAdmin):
         'fingerprint',
         'notification_sent_at',
         'notification_error',
-        'moderation_chat_id',
-        'moderation_message_id',
         'reply_sent_at',
         'reply_error',
         'created_at',
@@ -335,12 +382,81 @@ class TrackerUserAdmin(admin.ModelAdmin):
         'display_name',
         'username',
         'telegram_id',
+        'stats_books',
+        'stats_completed',
+        'stats_total',
+        'stats_progress',
         'tracker_preview_link',
         'webapp_viewport',
         'created_at',
     )
     search_fields = ('display_name', 'username', 'telegram_id')
-    readonly_fields = ('tracker_preview_link',)
+    readonly_fields = ('tracker_preview_link', 'statistics')
+
+    class Media:
+        css = {'all': ('app/admin/tracker-admin.css',)}
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related(
+                Prefetch(
+                    'books',
+                    queryset=UserBook.objects.select_related('book').prefetch_related(
+                        'book__pages', 'works'
+                    ),
+                )
+            )
+        )
+
+    @staticmethod
+    def _statistics(user):
+        if not hasattr(user, '_tracker_admin_statistics'):
+            books = list(user.books.all())
+            total = sum(book.book.total_pages_count for book in books)
+            completed = sum(book.works.count() for book in books)
+            user._tracker_admin_statistics = {
+                'books': len(books),
+                'completed': completed,
+                'total': total,
+                'progress': round(completed * 100 / total) if total else 0,
+            }
+        return user._tracker_admin_statistics
+
+    @admin.display(description='Раскрасок')
+    def stats_books(self, user):
+        return self._statistics(user)['books']
+
+    @admin.display(description='Раскрашено')
+    def stats_completed(self, user):
+        return self._statistics(user)['completed']
+
+    @admin.display(description='Страниц всего')
+    def stats_total(self, user):
+        return self._statistics(user)['total']
+
+    @admin.display(description='Прогресс')
+    def stats_progress(self, user):
+        return f'{self._statistics(user)["progress"]}%'
+
+    @admin.display(description='Статистика пользователя')
+    def statistics(self, user):
+        stats = self._statistics(user)
+        books_label = pluralize_ru(stats['books'], 'раскраска', 'раскраски', 'раскрасок')
+        return format_html(
+            '<div class="tracker-user-statistics">'
+            '<div><b>{}</b><span>раскрашено</span></div>'
+            '<div><b>{}</b><span>{}</span></div>'
+            '<div><b>{}</b><span>страниц всего</span></div>'
+            '<div><b>{}%</b><span>прогресс</span></div>'
+            '</div>',
+            stats['completed'],
+            stats['books'],
+            books_label.split(' ', 1)[1],
+            stats['total'],
+            stats['progress'],
+        )
 
     @admin.display(description='Предпросмотр')
     def tracker_preview_link(self, user):

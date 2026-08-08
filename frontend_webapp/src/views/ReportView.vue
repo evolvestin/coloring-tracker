@@ -12,6 +12,7 @@ const store = useTrackerStore()
 const month = ref(route.query.month || store.report?.month || '')
 const monthPickerOpen = ref(false)
 const monthPicker = ref(null)
+const activePhoto = ref(null)
 
 const report = computed(() => store.report)
 const loading = computed(() => store.reportLoading && !store.reportLoaded)
@@ -89,12 +90,25 @@ function monthLabel(value) {
   if (isNaN(date.getTime())) return ''
   return capitalize(new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(date))
 }
+function openPhoto(work) {
+  activePhoto.value = { src: work.photo, title: `Фото работы · стр. ${work.page}` }
+}
+function closePhoto() {
+  activePhoto.value = null
+}
+function closePhotoOnEscape(event) {
+  if (event.key === 'Escape') closePhoto()
+}
 
 onMounted(() => {
   load()
   document.addEventListener('pointerdown', closeMonthPicker)
+  document.addEventListener('keydown', closePhotoOnEscape)
 })
-onBeforeUnmount(() => document.removeEventListener('pointerdown', closeMonthPicker))
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeMonthPicker)
+  document.removeEventListener('keydown', closePhotoOnEscape)
+})
 </script>
 
 <template>
@@ -133,11 +147,12 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeMonthPick
         <div class="activity-colorings">
           <article v-for="coloring in activityByColoring" :key="coloring.title" class="activity-coloring">
             <div class="coloring-heading"><span class="work-mark">{{ coloring.days[0].works[0].icon || '❀' }}</span><h3>{{ coloring.title }}</h3></div>
-            <div class="activity-days"><div v-for="day in coloring.days" :key="day.date" class="activity-day"><time>{{ dateLabel(day.date) }}</time><div class="activity-works"><div v-for="work in day.works" :key="work.page" class="activity-work"><b>стр. {{ work.page }}</b><span v-if="work.photo" class="photo-mark"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5h3l1.3-2h7.4l1.3 2h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg>Фото</span></div></div></div></div>
+            <div class="activity-days"><div v-for="day in coloring.days" :key="day.date" class="activity-day"><time>{{ dateLabel(day.date) }}</time><div class="activity-works"><div v-for="work in day.works" :key="work.page" class="activity-work"><b>стр. {{ work.page }}</b><button v-if="work.photo" class="photo-preview" type="button" :aria-label="`Открыть фото работы, страница ${work.page}`" @click="openPhoto(work)"><img :src="work.photo" alt="Фото работы"><span aria-hidden="true">↗</span></button></div></div></div></div>
           </article>
         </div>
       </section>
     </template>
     <div v-else-if="!loading && report" class="empty compact-empty"><div>❀</div><h2>Пока нет работ</h2><p>Первый отчёт появится после завершённой раскраски.</p></div>
+    <transition name="modal"><div v-if="activePhoto" class="report-photo-backdrop" @click.self="closePhoto"><section class="report-photo-viewer" role="dialog" aria-modal="true" aria-label="Просмотр фото"><button class="modal-close" type="button" aria-label="Закрыть просмотр" @click="closePhoto">×</button><p>{{ activePhoto.title }}</p><img :src="activePhoto.src" :alt="activePhoto.title"></section></div></transition>
   </section>
 </template>

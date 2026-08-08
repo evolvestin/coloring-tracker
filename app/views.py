@@ -909,11 +909,10 @@ def tracker_month_report(request):
         .select_related('user_book__book', 'page')
         .order_by('-completed_at', '-created_at')
     )
-    photo_pages = set(
-        ColoringPagePhoto.objects.filter(user_book__in=user_books(request)).values_list(
-            'user_book_id', 'page_id'
-        )
-    )
+    photo_urls = {
+        (photo.user_book_id, photo.page_id): media_url(request, photo.image, photo.updated_at)
+        for photo in ColoringPagePhoto.objects.filter(user_book__in=user_books(request))
+    }
     daily, books, entries_by_day = defaultdict(int), defaultdict(int), defaultdict(list)
     for work in works:
         daily[work.completed_at.day] += 1
@@ -922,7 +921,7 @@ def tracker_month_report(request):
             {
                 'book': work.user_book.book.title,
                 'page': work.page.label,
-                'photo': (work.user_book_id, work.page_id) in photo_pages,
+                'photo': photo_urls.get((work.user_book_id, work.page_id), ''),
                 'icon': work.user_book.book.report_icon,
             }
         )
