@@ -186,7 +186,7 @@ class ColoringBookAdmin(admin.ModelAdmin):
         css = {'all': ('app/admin/tracker-admin.css',)}
 
     def get_queryset(self, request):
-        return (
+        queryset = (
             super()
             .get_queryset(request)
             .annotate(
@@ -198,11 +198,14 @@ class ColoringBookAdmin(admin.ModelAdmin):
             )
             .prefetch_related('pages')
         )
+        if not request.GET.get('o'):
+            queryset = queryset.order_by('_source_order', 'title', 'pk')
+        return queryset
 
     def get_ordering(self, request):
-        if request.GET.get('o'):
-            return super().get_ordering(request)
-        return ('_source_order', 'title', 'pk')
+        # `_source_order` is added in get_queryset(), so it cannot be passed
+        # to ModelAdmin.get_queryset() before the annotation exists.
+        return super().get_ordering(request) if request.GET.get('o') else ()
 
     @admin.display(description='Источник')
     def source_badge(self, book):
