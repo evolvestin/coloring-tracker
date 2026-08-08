@@ -1,0 +1,10 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+  {% if pages_json_url %}
+    <li>
+      <a href="{{ pages_json_url }}">Импорт страниц из JSON</a>
+    </li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

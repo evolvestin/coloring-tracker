@@ -62,7 +62,7 @@ def parse_pages_json(raw_json):
         pages.append((number, spread_end, title))
 
     pages.sort(key=lambda page: page[0])
-    for previous, current in zip(pages, pages[1:], strict=True):
+    for previous, current in zip(pages, pages[1:], strict=False):
         previous_end = previous[1] or previous[0]
         if current[0] <= previous_end:
             raise ValidationError(

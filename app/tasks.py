@@ -65,6 +65,7 @@ def suggestion_notification_text(suggestion):
         f'<b>{display_name}</b> ({username}) предложил раскраску\n\n'
         f'{_code_block(suggestion.title, 900)}\n'
         f'{_code_block(suggestion.source_text, 1800)}\n\n'
+        'Ответьте на это сообщение, чтобы отправить ответ пользователю.\n'
         f'<a href="{html.escape(admin_suggestion_url(suggestion.pk), quote=True)}">'
         f'Открыть предложение в админке</a>\n{user_link}'
     )
@@ -75,14 +76,14 @@ async def _send_telegram_message(text, chat_id):
     if not token or not chat_id:
         raise RuntimeError('TELEGRAM_BOT_TOKEN и TELEGRAM_SUGGESTIONS_CHAT_ID обязательны.')
     async with Bot(token, default=DefaultBotProperties(parse_mode=ParseMode.HTML)) as bot:
-        await bot.send_message(chat_id=chat_id, text=text, disable_web_page_preview=True)
+        return await bot.send_message(chat_id=chat_id, text=text, disable_web_page_preview=True)
 
 
 @shared_task
 def send_suggestion_notification(suggestion_id):
     suggestion = ColoringSuggestion.objects.select_related('user').get(pk=suggestion_id)
     try:
-        asyncio.run(
+        sent_message = asyncio.run(
             _send_telegram_message(
                 suggestion_notification_text(suggestion), os.getenv('TELEGRAM_SUGGESTIONS_CHAT_ID')
             )
@@ -94,23 +95,15 @@ def send_suggestion_notification(suggestion_id):
         return False
     suggestion.notification_sent_at = timezone.now()
     suggestion.notification_error = ''
-    suggestion.save(update_fields=('notification_sent_at', 'notification_error', 'updated_at'))
-    return True
-
-
-@shared_task
-def send_suggestion_reply(suggestion_id):
-    suggestion = ColoringSuggestion.objects.select_related('user').get(pk=suggestion_id)
-    if not suggestion.admin_reply.strip():
-        return False
-    try:
-        asyncio.run(_send_telegram_message(suggestion.admin_reply, suggestion.user.telegram_id))
-    except Exception as exc:
-        logger.exception('Could not send reply for suggestion %s', suggestion_id)
-        suggestion.reply_error = str(exc)[:4000]
-        suggestion.save(update_fields=('reply_error', 'updated_at'))
-        return False
-    suggestion.reply_sent_at = timezone.now()
-    suggestion.reply_error = ''
-    suggestion.save(update_fields=('reply_sent_at', 'reply_error', 'updated_at'))
+    suggestion.moderation_chat_id = sent_message.chat.id
+    suggestion.moderation_message_id = sent_message.message_id
+    suggestion.save(
+        update_fields=(
+            'notification_sent_at',
+            'notification_error',
+            'moderation_chat_id',
+            'moderation_message_id',
+            'updated_at',
+        )
+    )
     return True

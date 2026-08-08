@@ -469,7 +469,7 @@ def validate_personal_pages(book, page_payloads, *, include_existing=True, allow
     if total_pages > PERSONAL_PAGE_LIMIT:
         raise ValueError(f'В личной раскраске может быть не больше {PERSONAL_PAGE_LIMIT} страниц.')
     intervals.sort()
-    for previous, current in zip(intervals, intervals[1:], strict=True):
+    for previous, current in zip(intervals, intervals[1:], strict=False):
         if current[0] <= previous[1]:
             raise ValueError('Страницы и развороты не должны пересекаться.')
     return pages

@@ -221,6 +221,12 @@ class ColoringSuggestion(TimestampedModel):
     fingerprint = models.CharField('Отпечаток', max_length=64)
     notification_sent_at = models.DateTimeField('Уведомление отправлено', null=True, blank=True)
     notification_error = models.TextField('Ошибка уведомления', blank=True)
+    moderation_chat_id = models.BigIntegerField(
+        'ID группы модераторов', null=True, blank=True, db_index=True
+    )
+    moderation_message_id = models.PositiveBigIntegerField(
+        'ID сообщения в группе модераторов', null=True, blank=True
+    )
     admin_reply = models.TextField('Ответ пользователю', blank=True)
     reply_sent_at = models.DateTimeField('Ответ отправлен', null=True, blank=True)
     reply_error = models.TextField('Ошибка ответа', blank=True)

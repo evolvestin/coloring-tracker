@@ -3,12 +3,10 @@ import json
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
 from django.forms.utils import flatatt
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from django.utils import timezone
 from django.utils.html import format_html, mark_safe
 
 from app.models import (
@@ -23,7 +21,6 @@ from app.models import (
     UserBook,
 )
 from app.page_import import ColoringBookPagesImportForm, sync_book_pages
-from app.tasks import send_suggestion_reply
 
 
 class FlowerIconSelect(forms.Select):
@@ -258,48 +255,8 @@ class ColoringColorCodeAdmin(admin.ModelAdmin):
     fields = ('user_book', 'page', 'image')
 
 
-class TelegramReplyTextarea(forms.Textarea):
-    class Media:
-        css = {'all': ('app/admin/telegram-reply-editor.css',)}
-        js = ('app/admin/telegram-reply-editor.js',)
-
-
-class ColoringSuggestionAdminForm(forms.ModelForm):
-    send_reply = forms.BooleanField(
-        required=False,
-        label='Отправить ответ пользователю сейчас',
-        help_text=(
-            'После сохранения ответ уйдёт в Telegram. Поддерживаются HTML-теги Telegram: '
-            '&lt;b&gt;, &lt;i&gt;, &lt;u&gt;, &lt;s&gt;, &lt;code&gt;, &lt;pre&gt; и '
-            '&lt;a href="..."&gt;ссылка&lt;/a&gt;.'
-        ),
-    )
-
-    class Meta:
-        model = ColoringSuggestion
-        fields = '__all__'
-        widgets = {
-            'admin_reply': TelegramReplyTextarea(attrs={'rows': 10}),
-        }
-
-    def clean_admin_reply(self):
-        reply = self.cleaned_data['admin_reply']
-        if len(reply) > 4096:
-            raise forms.ValidationError(
-                'Telegram принимает сообщения длиной не более 4096 символов.'
-            )
-        return reply
-
-    def clean(self):
-        cleaned = super().clean()
-        if cleaned.get('send_reply') and not cleaned.get('admin_reply', '').strip():
-            self.add_error('admin_reply', 'Введите текст ответа перед отправкой.')
-        return cleaned
-
-
 @admin.register(ColoringSuggestion)
 class ColoringSuggestionAdmin(admin.ModelAdmin):
-    form = ColoringSuggestionAdminForm
     list_display = (
         'title',
         'user_link',
@@ -314,6 +271,8 @@ class ColoringSuggestionAdmin(admin.ModelAdmin):
         'fingerprint',
         'notification_sent_at',
         'notification_error',
+        'moderation_chat_id',
+        'moderation_message_id',
         'reply_sent_at',
         'reply_error',
         'created_at',
@@ -332,14 +291,15 @@ class ColoringSuggestionAdmin(admin.ModelAdmin):
             'Ответ пользователю',
             {
                 'fields': (
-                    'admin_reply',
-                    'send_reply',
+                    'moderation_chat_id',
+                    'moderation_message_id',
                     'reply_sent_at',
                     'reply_error',
                 ),
                 'description': (
-                    'Текст отправляется с HTML-разметкой Telegram. Если нужно отправить тот же '
-                    'текст ещё раз, сохраните его с включённым флажком.'
+                    'Ответ отправляется из группы модераторов: найдите это сообщение и сделайте '
+                    'на него reply. Бот скопирует ответ пользователю вместе с форматированием, '
+                    'медиа и другими поддерживаемыми типами сообщений.'
                 ),
             },
         ),
@@ -367,24 +327,6 @@ class ColoringSuggestionAdmin(admin.ModelAdmin):
         return (
             'Ошибка: ' + suggestion.reply_error[:80] if suggestion.reply_error else 'Не отправлен'
         )
-
-    def save_model(self, request, obj, form, change):
-        send_reply = form.cleaned_data.get('send_reply', False)
-        super().save_model(request, obj, form, change)
-        if send_reply:
-            obj.reply_sent_at = None
-            obj.reply_error = ''
-            obj.save(update_fields=('reply_sent_at', 'reply_error', 'updated_at'))
-
-            def queue_reply(suggestion_id=obj.pk):
-                try:
-                    send_suggestion_reply.delay(suggestion_id)
-                except Exception as exc:
-                    ColoringSuggestion.objects.filter(pk=suggestion_id).update(
-                        reply_error=str(exc)[:4000], updated_at=timezone.now()
-                    )
-
-            transaction.on_commit(queue_reply)
 
 
 @admin.register(TrackerUser)

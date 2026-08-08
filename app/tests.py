@@ -1,29 +1,31 @@
+import asyncio
 import os
 from datetime import timedelta
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from app.models import ColoringBook, ColoringPage, ColoringSuggestion, TrackerUser, UserBook
 from app.page_import import parse_pages_json, sync_book_pages
-from app.tasks import suggestion_notification_text
+from app.tasks import send_suggestion_notification, suggestion_notification_text
 from app.views import suggestion_fingerprint, validate_image_upload
+from tracker_bot.main import copy_moderator_reply
 
 
-class SuggestionTests(TestCase):
+class SuggestionTests(TransactionTestCase):
     @override_settings(DEBUG=True)
     @patch('app.views.send_suggestion_notification.delay')
     def test_suggestion_is_saved_and_rate_limited(self, enqueue):
         payload = {'title': 'Secret Garden', 'source_text': 'любой источник'}
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(
-                '/api/tracker/suggestions/?dev=true', payload, content_type='application/json'
-            )
+        response = self.client.post(
+            '/api/tracker/suggestions/?dev=true', payload, content_type='application/json'
+        )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(ColoringSuggestion.objects.count(), 1)
         enqueue.assert_called_once()
@@ -62,6 +64,54 @@ class SuggestionTests(TestCase):
         self.assertIn('&amp;', message)
         self.assertIn(f'admin/app/coloringsuggestion/{suggestion.pk}/change/', message)
         self.assertIn('tg://user?id=123456', message)
+        self.assertIn('Ответьте на это сообщение', message)
+
+    @patch('app.tasks._send_telegram_message', new_callable=AsyncMock)
+    def test_notification_stores_group_message_reference(self, send_message):
+        user = TrackerUser.objects.create(telegram_id=123456)
+        suggestion = ColoringSuggestion.objects.create(
+            user=user,
+            title='Secret Garden',
+            fingerprint=suggestion_fingerprint('title', 'source'),
+        )
+        send_message.return_value = SimpleNamespace(chat=SimpleNamespace(id=-10042), message_id=77)
+
+        with patch.dict(
+            os.environ,
+            {
+                'TELEGRAM_BOT_TOKEN': 'token',
+                'TELEGRAM_SUGGESTIONS_CHAT_ID': '-10042',
+                'TELEGRAM_WEBAPP_URL': 'https://tracker.example/',
+            },
+        ):
+            self.assertTrue(send_suggestion_notification(suggestion.pk))
+
+        suggestion.refresh_from_db()
+        self.assertEqual(suggestion.moderation_chat_id, -10042)
+        self.assertEqual(suggestion.moderation_message_id, 77)
+
+    def test_group_reply_is_copied_to_the_requesting_user(self):
+        user = TrackerUser.objects.create(telegram_id=123456)
+        suggestion = ColoringSuggestion.objects.create(
+            user=user,
+            title='Secret Garden',
+            fingerprint=suggestion_fingerprint('title', 'source'),
+            moderation_chat_id=-10042,
+            moderation_message_id=77,
+        )
+        message = SimpleNamespace(
+            chat=SimpleNamespace(id=-10042),
+            reply_to_message=SimpleNamespace(message_id=77),
+            copy_to=AsyncMock(),
+        )
+
+        with patch.dict(os.environ, {'TELEGRAM_SUGGESTIONS_CHAT_ID': '-10042'}):
+            asyncio.run(copy_moderator_reply(message))
+
+        message.copy_to.assert_awaited_once_with(chat_id=123456)
+        suggestion.refresh_from_db()
+        self.assertIsNotNone(suggestion.reply_sent_at)
+        self.assertEqual(suggestion.reply_error, '')
 
     def test_invalid_image_is_rejected(self):
         error = validate_image_upload(SimpleUploadedFile('bad.jpg', b'not an image'))
