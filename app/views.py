@@ -5,7 +5,8 @@ import os
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, timedelta
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, urlencode
+from urllib.request import Request, urlopen
 
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
@@ -27,10 +28,11 @@ from app.models import (
     ColoringPagePhoto,
     ColoringSuggestion,
     ColoringWork,
+    StarDonation,
     TrackerUser,
     UserBook,
 )
-from app.tasks import send_suggestion_notification
+from app.tasks import send_donation_notification, send_suggestion_notification
 
 REPORT_LAUNCH_DATE = date(2026, 8, 1)
 SUGGESTION_COOLDOWN_SECONDS = 30
@@ -39,6 +41,51 @@ SUGGESTION_SOURCE_LIMIT = 100_000
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
 PERSONAL_BOOK_TITLE_LIMIT = 255
 PERSONAL_PAGE_LIMIT = 300
+DONATION_TITLE = 'Поддержка трекера'
+DONATION_DESCRIPTION = 'Спасибо, что помогаете развивать трекер раскрасок.'
+DONATION_PRESETS = (10, 50, 100, 250)
+DONATION_MIN_STARS = 1
+DONATION_MAX_STARS = 10_000
+
+
+def stars_test_mode_enabled():
+    return (
+        settings.DEBUG
+        or os.getenv('VITE_DEV_MODE', 'False').lower() == 'true'
+        or os.getenv('TELEGRAM_STARS_TEST_MODE', 'false').lower() == 'true'
+    )
+
+
+def stars_enabled():
+    return os.getenv('TELEGRAM_STARS_ENABLED', 'false').lower() == 'true'
+
+
+def donation_amounts():
+    return list(DONATION_PRESETS)
+
+
+def telegram_bot_api(method, data):
+    token = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+    if not token:
+        raise RuntimeError('TELEGRAM_BOT_TOKEN не настроен.')
+    encoded_data = {
+        key: json.dumps(value, ensure_ascii=False) if isinstance(value, (list, dict)) else value
+        for key, value in data.items()
+    }
+    request = Request(
+        f'https://api.telegram.org/bot{token}/{method}',
+        data=urlencode(encoded_data).encode(),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+        method='POST',
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            result = json.loads(response.read().decode())
+    except Exception as exc:
+        raise RuntimeError(f'Не удалось связаться с Telegram: {exc}') from exc
+    if not result.get('ok'):
+        raise RuntimeError(result.get('description', 'Telegram отклонил запрос.'))
+    return result.get('result')
 
 
 def media_url(request, field, updated_at=None):
@@ -365,6 +412,171 @@ def tracker_suggestion(request):
             {'error': 'Вы уже отправляли такое предложение. Спасибо, мы его проверяем.'}, status=409
         )
     return JsonResponse({'ok': True, 'id': suggestion.pk}, status=201)
+
+
+def donation_data(donation):
+    return {
+        'id': donation.pk,
+        'amount': donation.amount,
+        'status': donation.status,
+        'is_test': donation.is_test,
+    }
+
+
+@csrf_exempt
+@require_http_methods(['GET'])
+def tracker_stars(request):
+    user = tracker_identity(request)
+    return JsonResponse(
+        {
+            'enabled': stars_enabled(),
+            'test_mode': stars_test_mode_enabled(),
+            'amounts': donation_amounts(),
+            'can_donate': bool(user),
+        }
+    )
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def tracker_stars_invoice(request):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    test_mode = stars_test_mode_enabled()
+    if not test_mode and not stars_enabled():
+        return JsonResponse({'error': 'Поддержка Stars пока не включена.'}, status=503)
+    if not test_mode and not user.telegram_id:
+        return JsonResponse({'error': 'Реальный донат доступен только в Telegram.'}, status=403)
+    try:
+        payload = json.loads(request.body or '{}')
+        raw_amount = payload.get('amount', 0)
+        if isinstance(raw_amount, bool) or (
+            isinstance(raw_amount, float) and not raw_amount.is_integer()
+        ):
+            raise ValueError
+        amount = int(raw_amount)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        amount = 0
+    if not DONATION_MIN_STARS <= amount <= DONATION_MAX_STARS:
+        return JsonResponse(
+            {
+                'error': (
+                    f'Укажите целую сумму от {DONATION_MIN_STARS} до {DONATION_MAX_STARS} Stars.'
+                )
+            },
+            status=400,
+        )
+
+    donation = StarDonation.objects.create(user=user, amount=amount, is_test=test_mode)
+    if test_mode:
+        return JsonResponse({'donation': donation_data(donation), 'test_mode': True})
+
+    try:
+        invoice_url = telegram_bot_api(
+            'createInvoiceLink',
+            {
+                'title': DONATION_TITLE,
+                'description': DONATION_DESCRIPTION,
+                'payload': donation.payload,
+                'currency': 'XTR',
+                'prices': [{'label': 'Поддержка трекера', 'amount': amount}],
+            },
+        )
+    except RuntimeError as exc:
+        donation.status = StarDonation.STATUS_FAILED
+        donation.error = str(exc)[:4000]
+        donation.save(update_fields=('status', 'error', 'updated_at'))
+        return JsonResponse(
+            {'error': 'Не получилось открыть оплату. Попробуйте ещё раз.'}, status=502
+        )
+
+    donation.invoice_url = invoice_url
+    donation.save(update_fields=('invoice_url', 'updated_at'))
+    return JsonResponse(
+        {'donation': donation_data(donation), 'test_mode': False, 'invoice_url': invoice_url}
+    )
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def tracker_stars_test_complete(request, donation_id):
+    user = tracker_identity(request)
+    if not user or not stars_test_mode_enabled():
+        return JsonResponse({'error': 'Тестовый режим доступен только локально.'}, status=404)
+    donation = get_object_or_404(StarDonation, pk=donation_id, user=user, is_test=True)
+    if donation.status == StarDonation.STATUS_PENDING:
+        donation.status = StarDonation.STATUS_SUCCEEDED
+        donation.paid_at = timezone.now()
+        donation.save(update_fields=('status', 'paid_at', 'updated_at'))
+    return JsonResponse({'donation': donation_data(donation)})
+
+
+@require_http_methods(['GET'])
+def tracker_stars_status(request, donation_id):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    donation = get_object_or_404(StarDonation, pk=donation_id, user=user)
+    return JsonResponse({'donation': donation_data(donation)})
+
+
+def validate_donation_pre_checkout(payload, telegram_id, currency, total_amount):
+    donation = StarDonation.objects.filter(payload=payload).select_related('user').first()
+    if not donation:
+        return False, 'Этот счёт больше недействителен.'
+    if donation.status != StarDonation.STATUS_PENDING:
+        return False, 'Этот счёт уже обработан.'
+    if donation.user.telegram_id != telegram_id:
+        return False, 'Счёт создан для другого пользователя.'
+    if currency != 'XTR' or total_amount != donation.amount:
+        return False, 'Сумма счёта не совпадает.'
+    return True, ''
+
+
+def record_successful_donation(payload, telegram_id, payment):
+    with transaction.atomic():
+        donation = (
+            StarDonation.objects.select_for_update()
+            .select_related('user')
+            .filter(payload=payload)
+            .first()
+        )
+        if not donation or donation.user.telegram_id != telegram_id:
+            return False
+        if payment.currency != 'XTR' or payment.total_amount != donation.amount:
+            donation.status = StarDonation.STATUS_FAILED
+            donation.error = 'Telegram прислал платёж с неожиданной суммой или валютой.'
+            donation.save(update_fields=('status', 'error', 'updated_at'))
+            return False
+        if donation.status == StarDonation.STATUS_SUCCEEDED:
+            return True
+        donation.status = StarDonation.STATUS_SUCCEEDED
+        donation.telegram_payment_charge_id = payment.telegram_payment_charge_id
+        donation.provider_payment_charge_id = payment.provider_payment_charge_id or ''
+        donation.paid_at = timezone.now()
+        donation.error = ''
+        donation.save(
+            update_fields=(
+                'status',
+                'telegram_payment_charge_id',
+                'provider_payment_charge_id',
+                'paid_at',
+                'error',
+                'updated_at',
+            )
+        )
+
+        def queue_notification(donation_id=donation.pk):
+            try:
+                send_donation_notification.delay(donation_id)
+            except Exception as exc:
+                StarDonation.objects.filter(pk=donation_id).update(
+                    notification_error=str(exc)[:4000], updated_at=timezone.now()
+                )
+
+        transaction.on_commit(queue_notification)
+    return True
 
 
 @csrf_exempt

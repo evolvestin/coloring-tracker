@@ -5,6 +5,7 @@ import ReportView from '../views/ReportView.vue'
 import CatalogView from '../views/CatalogView.vue'
 import CatalogBookView from '../views/CatalogBookView.vue'
 import PersonalBookCreateView from '../views/PersonalBookCreateView.vue'
+import SupportView from '../views/SupportView.vue'
 
 if (window.location.hash.startsWith('#tgWebApp')) window.history.replaceState(null, '', window.location.pathname + window.location.search)
 
@@ -17,6 +18,7 @@ export default createRouter({
     { path: '/personal/new', component: PersonalBookCreateView },
     { path: '/book/:id', component: BookView, props: true },
     { path: '/report', component: ReportView },
+    { path: '/support', component: SupportView },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

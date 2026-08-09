@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 const props = defineProps({
   file: { type: Object, required: true },
   title: { type: String, default: 'Редактор изображения' },
+  aspectRatio: { type: Number, default: 0 },
 })
 const emit = defineEmits(['cancel', 'save'])
 
@@ -32,11 +33,17 @@ function rotatedSize() {
 function resetCrop() {
   const size = rotatedSize()
   const margin = 0.06
+  let width = size.width * (1 - margin * 2)
+  let height = size.height * (1 - margin * 2)
+  if (props.aspectRatio > 0) {
+    if (width / height > props.aspectRatio) width = height * props.aspectRatio
+    else height = width / props.aspectRatio
+  }
   crop.value = {
-    x: size.width * margin,
-    y: size.height * margin,
-    width: size.width * (1 - margin * 2),
-    height: size.height * (1 - margin * 2),
+    x: (size.width - width) / 2,
+    y: (size.height - height) / 2,
+    width,
+    height,
   }
 }
 
@@ -125,6 +132,27 @@ function updateCrop(event) {
     crop.value = { x, y, width: Math.max(20, Math.abs(point.x - start.x)), height: Math.max(20, Math.abs(point.y - start.y)) }
     crop.value.width = Math.min(crop.value.width, size.width - x)
     crop.value.height = Math.min(crop.value.height, size.height - y)
+  } else if (props.aspectRatio > 0) {
+    const leftHandle = drag.value.mode.includes('w')
+    const topHandle = drag.value.mode.includes('n')
+    const anchorX = leftHandle ? initial.x + initial.width : initial.x
+    const anchorY = topHandle ? initial.y + initial.height : initial.y
+    const requestedWidth = leftHandle ? anchorX - point.x : point.x - anchorX
+    const requestedHeight = topHandle ? anchorY - point.y : point.y - anchorY
+    const maxWidth = leftHandle ? anchorX : size.width - anchorX
+    const maxHeight = topHandle ? anchorY : size.height - anchorY
+    const maxRatioWidth = Math.min(maxWidth, maxHeight * props.aspectRatio)
+    const width = Math.min(
+      maxRatioWidth,
+      Math.max(20, requestedWidth, requestedHeight * props.aspectRatio),
+    )
+    const height = width / props.aspectRatio
+    crop.value = {
+      x: leftHandle ? anchorX - width : anchorX,
+      y: topHandle ? anchorY - height : anchorY,
+      width,
+      height,
+    }
   } else {
     let left = initial.x, top = initial.y
     let right = initial.x + initial.width, bottom = initial.y + initial.height

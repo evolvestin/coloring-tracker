@@ -13,7 +13,7 @@ from django.core.management import call_command
 from django.urls import reverse
 from django.utils import timezone
 
-from app.models import ColoringSuggestion
+from app.models import ColoringSuggestion, StarDonation
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +103,59 @@ def send_suggestion_notification(suggestion_id):
             'notification_error',
             'moderation_chat_id',
             'moderation_message_id',
+            'updated_at',
+        )
+    )
+    return True
+
+
+def donation_notification_text(donation):
+    user = donation.user
+    display_name = html.escape((user.display_name or 'Пользователь')[:300], quote=False)
+    username = html.escape(
+        (f'@{user.username}' if user.username else 'без username')[:300], quote=False
+    )
+    user_link = (
+        f'<a href="tg://user?id={user.telegram_id}">Открыть профиль</a>'
+        if user.telegram_id
+        else 'Профиль пользователя недоступен в Telegram'
+    )
+    return (
+        '✨ <b>Новая поддержка проекта</b>\n\n'
+        f'<b>{donation.amount} Stars</b> от {display_name} ({username})\n'
+        f'{user_link}'
+    )
+
+
+@shared_task
+def send_donation_notification(donation_id):
+    donation = StarDonation.objects.select_related('user').get(pk=donation_id)
+    if donation.status != StarDonation.STATUS_SUCCEEDED or donation.is_test:
+        return False
+    if donation.notification_sent_at:
+        return True
+    try:
+        sent_message = asyncio.run(
+            _send_telegram_message(
+                donation_notification_text(donation),
+                os.getenv('TELEGRAM_SUGGESTIONS_CHAT_ID'),
+            )
+        )
+    except Exception as exc:
+        logger.exception('Could not notify about donation %s', donation_id)
+        donation.notification_error = str(exc)[:4000]
+        donation.save(update_fields=('notification_error', 'updated_at'))
+        return False
+    donation.notification_sent_at = timezone.now()
+    donation.notification_error = ''
+    donation.notification_chat_id = sent_message.chat.id
+    donation.notification_message_id = sent_message.message_id
+    donation.save(
+        update_fields=(
+            'notification_sent_at',
+            'notification_error',
+            'notification_chat_id',
+            'notification_message_id',
             'updated_at',
         )
     )

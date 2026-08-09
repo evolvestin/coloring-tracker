@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, F
 from aiogram.filters import BaseFilter, CommandStart
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 from asgiref.sync import sync_to_async
@@ -15,6 +15,7 @@ django.setup()
 from django.utils import timezone  # noqa: E402
 
 from app.models import ColoringSuggestion  # noqa: E402
+from app.views import record_successful_donation, validate_donation_pre_checkout  # noqa: E402
 
 
 def configured_moderation_chat_id():
@@ -80,6 +81,33 @@ async def copy_moderator_reply(message: Message):
     await mark_reply_sent(suggestion.pk)
 
 
+@sync_to_async
+def check_pre_checkout(payload, telegram_id, currency, total_amount):
+    return validate_donation_pre_checkout(payload, telegram_id, currency, total_amount)
+
+
+async def pre_checkout(query):
+    telegram_id = query.from_user.id if query.from_user else None
+    ok, error = await check_pre_checkout(
+        query.invoice_payload, telegram_id, query.currency, query.total_amount
+    )
+    await query.answer(ok=ok, error_message=error or None)
+
+
+@sync_to_async
+def save_successful_payment(payload, telegram_id, payment):
+    return record_successful_donation(payload, telegram_id, payment)
+
+
+async def successful_payment(message: Message):
+    payment = message.successful_payment
+    if not payment or not message.from_user:
+        return
+    saved = await save_successful_payment(payment.invoice_payload, message.from_user.id, payment)
+    if saved:
+        await message.answer('Спасибо за поддержку трекера! ✨')
+
+
 async def start(message: Message):
     app_url = os.getenv('TELEGRAM_WEBAPP_URL', '').rstrip('/')
     if not app_url:
@@ -99,6 +127,8 @@ async def main():
         raise RuntimeError('TELEGRAM_BOT_TOKEN is required for the bot service.')
     dispatcher = Dispatcher()
     dispatcher.message.register(copy_moderator_reply, ModerationReplyFilter())
+    dispatcher.pre_checkout_query.register(pre_checkout)
+    dispatcher.message.register(successful_payment, F.successful_payment)
     dispatcher.message.register(start, CommandStart())
     async with Bot(token) as bot:
         await dispatcher.start_polling(bot)

@@ -18,6 +18,7 @@ from app.models import (
     ColoringPagePhoto,
     ColoringSuggestion,
     ColoringWork,
+    StarDonation,
     TrackerUser,
     UserBook,
 )
@@ -376,6 +377,54 @@ class ColoringSuggestionAdmin(admin.ModelAdmin):
             return 'Отправлен'
         return (
             'Ошибка: ' + suggestion.reply_error[:80] if suggestion.reply_error else 'Не отправлен'
+        )
+
+
+@admin.register(StarDonation)
+class StarDonationAdmin(admin.ModelAdmin):
+    list_display = (
+        'user',
+        'amount',
+        'status',
+        'is_test',
+        'paid_at',
+        'notification_status',
+        'created_at',
+    )
+    list_filter = ('status', 'is_test', 'notification_sent_at', 'created_at')
+    search_fields = ('user__display_name', 'user__username', 'user__telegram_id', 'payload')
+    readonly_fields = (
+        'user',
+        'amount',
+        'payload',
+        'status',
+        'is_test',
+        'invoice_url',
+        'telegram_payment_charge_id',
+        'provider_payment_charge_id',
+        'paid_at',
+        'error',
+        'notification_sent_at',
+        'notification_error',
+        'notification_chat_id',
+        'notification_message_id',
+        'created_at',
+        'updated_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description='Уведомление')
+    def notification_status(self, donation):
+        if donation.is_test:
+            return 'Тест — не отправляется'
+        if donation.notification_sent_at:
+            return 'Отправлено'
+        return (
+            'Ошибка: ' + donation.notification_error[:80]
+            if donation.notification_error
+            else 'В очереди'
         )
 
 

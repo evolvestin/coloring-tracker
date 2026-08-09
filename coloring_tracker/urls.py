@@ -18,6 +18,13 @@ urlpatterns = [
     path('api/tracker/catalog/', views.tracker_catalog),
     path('api/tracker/catalog/<int:book_id>/', views.tracker_catalog_book_detail),
     path('api/tracker/suggestions/', views.tracker_suggestion),
+    path('api/tracker/stars/', views.tracker_stars),
+    path('api/tracker/stars/invoice/', views.tracker_stars_invoice),
+    path(
+        'api/tracker/stars/<int:donation_id>/test-complete/',
+        views.tracker_stars_test_complete,
+    ),
+    path('api/tracker/stars/<int:donation_id>/', views.tracker_stars_status),
     path('api/tracker/profile/', views.tracker_profile),
     path('api/tracker/catalog/<int:book_id>/collection/', views.tracker_collection_book),
     path('api/tracker/books/<int:user_book_id>/', views.tracker_book_detail),

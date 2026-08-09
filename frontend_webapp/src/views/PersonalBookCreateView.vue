@@ -21,7 +21,20 @@ const pages = ref(Array.from({ length: 50 }, (_, index) => ({ id: null, _key: `n
 const error = ref('')
 const saving = ref(false)
 
-function chooseCover() { coverInput.value?.click() }
+function chooseCover() {
+  const input = coverInput.value
+  if (!input) return
+  input.value = ''
+  if (typeof input.showPicker === 'function') {
+    try {
+      input.showPicker()
+      return
+    } catch {
+      // Some Telegram WebView versions reject showPicker; use the compatible fallback.
+    }
+  }
+  input.click()
+}
 
 function editCover() {
   if (cover.value) editor.value = { file: coverSource.value || cover.value }
@@ -31,7 +44,9 @@ function selectCover(event) {
   const file = event.target.files?.[0]
   event.target.value = ''
   if (!file) return
-  if (!file.type.startsWith('image/')) {
+  const hasImageType = (file.type || '').startsWith('image/')
+  const hasImageExtension = /\.(jpe?g|png|webp)$/i.test(file.name || '')
+  if (!hasImageType && !hasImageExtension) {
     error.value = 'Выберите изображение для обложки.'
     return
   }
@@ -134,6 +149,6 @@ onBeforeUnmount(() => {
       <p v-if="error" class="form-error" role="alert">{{ error }}</p>
       <div class="personal-form-actions"><button class="secondary" type="button" @click="router.back()">Отмена</button><button class="primary" type="submit" :disabled="saving">{{ saving ? 'Создаём…' : 'Добавить раскраску' }}</button></div>
     </form>
-    <ImageEditor v-if="editor" :file="editor.file" title="Обложка раскраски" @cancel="editor = null" @save="saveCover" />
+    <ImageEditor v-if="editor" :file="editor.file" title="Обложка раскраски" :aspect-ratio="3 / 4" @cancel="editor = null" @save="saveCover" />
   </section>
 </template>

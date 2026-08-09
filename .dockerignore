@@ -23,6 +23,7 @@ logs/
 
 # Local data
 data/
+pdf_to_jpg/
 *.sqlite3
 *.sqlite
 *.db

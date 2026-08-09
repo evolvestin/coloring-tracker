@@ -11,10 +11,21 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from app.models import ColoringBook, ColoringPage, ColoringSuggestion, TrackerUser, UserBook
+from app.models import (
+    ColoringBook,
+    ColoringPage,
+    ColoringSuggestion,
+    StarDonation,
+    TrackerUser,
+    UserBook,
+)
 from app.page_import import parse_pages_json, sync_book_pages
-from app.tasks import send_suggestion_notification, suggestion_notification_text
-from app.views import suggestion_fingerprint, validate_image_upload
+from app.tasks import (
+    send_donation_notification,
+    send_suggestion_notification,
+    suggestion_notification_text,
+)
+from app.views import record_successful_donation, suggestion_fingerprint, validate_image_upload
 from tracker_bot.main import copy_moderator_reply
 
 
@@ -116,6 +127,82 @@ class SuggestionTests(TransactionTestCase):
     def test_invalid_image_is_rejected(self):
         error = validate_image_upload(SimpleUploadedFile('bad.jpg', b'not an image'))
         self.assertIn('Не удалось распознать изображение', error)
+
+
+class StarDonationTests(TransactionTestCase):
+    @override_settings(DEBUG=True)
+    def test_local_test_donation_has_no_invoice_and_can_be_completed(self):
+        fractional = self.client.post(
+            '/api/tracker/stars/invoice/?dev=true',
+            {'amount': 37.5},
+            content_type='application/json',
+        )
+        self.assertEqual(fractional.status_code, 400)
+
+        response = self.client.post(
+            '/api/tracker/stars/invoice/?dev=true',
+            {'amount': 37},
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['test_mode'])
+        self.assertEqual(response.json()['donation']['amount'], 37)
+        donation_id = response.json()['donation']['id']
+
+        completed = self.client.post(f'/api/tracker/stars/{donation_id}/test-complete/?dev=true')
+        self.assertEqual(completed.status_code, 200)
+        self.assertEqual(completed.json()['donation']['status'], StarDonation.STATUS_SUCCEEDED)
+
+        repeated = self.client.post(f'/api/tracker/stars/{donation_id}/test-complete/?dev=true')
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(
+            StarDonation.objects.get(pk=donation_id).status, StarDonation.STATUS_SUCCEEDED
+        )
+
+    @patch('app.views.send_donation_notification.delay')
+    def test_successful_payment_is_idempotent(self, enqueue):
+        user = TrackerUser.objects.create(telegram_id=987654)
+        donation = StarDonation.objects.create(user=user, amount=10)
+        payment = SimpleNamespace(
+            currency='XTR',
+            total_amount=10,
+            telegram_payment_charge_id='charge-1',
+            provider_payment_charge_id='',
+        )
+
+        self.assertTrue(record_successful_donation(donation.payload, user.telegram_id, payment))
+        self.assertTrue(record_successful_donation(donation.payload, user.telegram_id, payment))
+        donation.refresh_from_db()
+        self.assertEqual(donation.status, StarDonation.STATUS_SUCCEEDED)
+        self.assertEqual(
+            StarDonation.objects.filter(status=StarDonation.STATUS_SUCCEEDED).count(), 1
+        )
+        enqueue.assert_called_once_with(donation.pk)
+
+    @patch('app.tasks._send_telegram_message', new_callable=AsyncMock)
+    def test_successful_donation_notifies_moderation_chat(self, send_message):
+        user = TrackerUser.objects.create(
+            telegram_id=987654,
+            display_name='Имя <Фамилия>',
+            username='supporter',
+        )
+        donation = StarDonation.objects.create(user=user, amount=25, status='succeeded')
+        send_message.return_value = SimpleNamespace(chat=SimpleNamespace(id=-10042), message_id=88)
+
+        with patch.dict(
+            os.environ,
+            {
+                'TELEGRAM_BOT_TOKEN': 'token',
+                'TELEGRAM_SUGGESTIONS_CHAT_ID': '-10042',
+            },
+        ):
+            self.assertTrue(send_donation_notification(donation.pk))
+
+        donation.refresh_from_db()
+        self.assertEqual(donation.notification_chat_id, -10042)
+        self.assertEqual(donation.notification_message_id, 88)
+        self.assertTrue(donation.notification_sent_at)
+        self.assertIn('&lt;Фамилия&gt;', send_message.call_args.args[0])
 
 
 class PersonalBookTests(TestCase):

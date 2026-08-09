@@ -22,7 +22,7 @@ onMounted(() => {
 
 <template>
   <section class="page tracker-page">
-    <header class="main-header"><div><p class="eyebrow">МОЙ ТРЕКЕР</p><h1>Раскраски</h1></div></header>
+    <header class="main-header"><div><p class="eyebrow">МОЙ ТРЕКЕР</p><h1>Раскраски</h1></div><button class="support-quick" type="button" aria-label="Помочь трекеру" @click="router.push('/support')"><span>✾</span><b>Помочь</b></button></header>
     <div class="hero-card">
       <img v-if="profile?.user?.photo_url" class="avatar-photo" :src="profile.user.photo_url" alt="Аватар"><div v-else class="avatar">❀</div>
       <div><b>{{ name }}</b><p>{{ formatCount(books.length, 'book') }} · {{ totals.done }} из {{ totals.total }} работ</p></div>

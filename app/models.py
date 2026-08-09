@@ -1,3 +1,5 @@
+import uuid
+
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -243,3 +245,55 @@ class ColoringSuggestion(TimestampedModel):
 
     def __str__(self):
         return f'{self.title} — {self.user}'
+
+
+class StarDonation(TimestampedModel):
+    """A Telegram Stars donation invoice and its server-side receipt."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_SUCCEEDED = 'succeeded'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = (
+        (STATUS_PENDING, 'Ожидает оплаты'),
+        (STATUS_SUCCEEDED, 'Оплачен'),
+        (STATUS_FAILED, 'Ошибка'),
+    )
+
+    user = models.ForeignKey(TrackerUser, on_delete=models.PROTECT, related_name='star_donations')
+    amount = models.PositiveIntegerField('Сумма, Stars')
+    payload = models.CharField(
+        'Платёжный payload',
+        max_length=128,
+        unique=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    status = models.CharField(
+        'Статус', max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
+    is_test = models.BooleanField('Тестовый платёж', default=False)
+    invoice_url = models.URLField('Ссылка на invoice', max_length=1000, blank=True)
+    telegram_payment_charge_id = models.CharField(
+        'Telegram payment charge ID', max_length=255, unique=True, null=True, blank=True
+    )
+    provider_payment_charge_id = models.CharField(
+        'Provider payment charge ID', max_length=255, blank=True
+    )
+    paid_at = models.DateTimeField('Дата оплаты', null=True, blank=True)
+    error = models.TextField('Ошибка', blank=True)
+    notification_sent_at = models.DateTimeField('Уведомление отправлено', null=True, blank=True)
+    notification_error = models.TextField('Ошибка уведомления', blank=True)
+    notification_chat_id = models.BigIntegerField(
+        'ID чата уведомлений', null=True, blank=True, db_index=True
+    )
+    notification_message_id = models.PositiveBigIntegerField(
+        'ID сообщения уведомления', null=True, blank=True
+    )
+
+    class Meta:
+        verbose_name = 'Донат Stars'
+        verbose_name_plural = 'Донаты Stars'
+        ordering = ('-created_at',)
+
+    def __str__(self):
+        return f'{self.amount} Stars — {self.user}'
