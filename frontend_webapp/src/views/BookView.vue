@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 import ImageEditor from '../components/ImageEditor.vue'
 import PersonalPagesEditor from '../components/PersonalPagesEditor.vue'
+import RandomizerCard from '../components/RandomizerCard.vue'
 import { FLOWER_ICONS } from '../constants'
 import { formatCount } from '../pluralize'
 import { useTrackerStore } from '../stores/tracker'
@@ -26,11 +27,17 @@ const isPersonal = computed(() => !!data.value?.book?.is_personal)
 async function load() {
   data.value = await api(`/api/tracker/books/${route.params.id}/`)
   if (activePage.value) activePage.value = data.value.pages.find(page => page.id === activePage.value.id) || null
+  const requestedPageId = Number(route.query.page)
+  if (requestedPageId && !activePage.value) activePage.value = data.value.pages.find(page => page.id === requestedPageId) || null
 }
 function openPage(page) {
   activePage.value = page
   clearTimeout(reportVisibilityStatusTimer)
   reportVisibilityStatus.value = ''
+}
+function openRandomResult(randomResult) {
+  const page = data.value?.pages.find(item => item.id === randomResult?.page_id)
+  if (page) openPage(page)
 }
 function chooseWork() { workInput.value?.click() }
 function chooseColorCode() { colorCodeInput.value?.click() }
@@ -278,6 +285,7 @@ onMounted(load)
   <section v-if="data" class="page book-view">
     <header><button class="back" aria-label="Назад" @click="router.back()"><svg viewBox="0 0 24 24" fill="none"><path d="m14.5 5-7 7 7 7"/></svg></button><div><p class="eyebrow">МОЯ РАСКРАСКА</p><h1>{{ data.book.title }}</h1><p><template v-if="isPersonal"><span class="personal-heading-flag">{{ data.book.emoji }}</span> Личная</template><template v-else>{{ data.book.author }}</template></p></div></header>
     <div class="progress-card"><div class="progress-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 19.5V10m5 9.5V4m5 15.5v-7m5 7V7"/></svg></div><div><b>{{ data.book.done }} из {{ data.book.total }} работ</b><span>Осталось {{ formatCount(data.book.total - data.book.done, 'work') }}</span></div><div class="progress-line"><i :style="{ width: data.book.progress + '%' }"></i></div></div>
+    <RandomizerCard :user-book-id="route.params.id" compact @open-result="openRandomResult" />
     <div v-if="isPersonal" class="personal-cover-panel"><div v-if="data.book.cover" class="personal-cover personal-cover-large has-image"><img :src="data.book.cover" :alt="data.book.title"><small>Личная обложка</small></div><div v-else class="personal-cover personal-cover-large"><i class="cover-spark spark-one">✦</i><i class="cover-spark spark-two">✿</i><i class="cover-spark spark-three">·</i><span>{{ data.book.emoji || '❀' }}</span><small>Личная обложка</small></div><div class="personal-cover-actions"><b>Обложка раскраски</b><span>{{ data.book.cover ? 'Её можно изменить в редакторе.' : 'Добавьте изображение или оставьте эмодзи.' }}</span><input ref="coverInput" hidden type="file" accept="image/jpeg,image/png,image/webp" @change="openEditor($event, 'cover')"><div><button class="secondary" type="button" @click="chooseCover">{{ data.book.cover ? 'Заменить' : 'Добавить изображение' }}</button><button v-if="data.book.cover" class="text-action" type="button" :disabled="editingExisting" @click="editExisting('cover')">{{ editingExisting ? 'Открываем…' : 'Изменить' }}</button></div></div></div>
     <div v-if="isPersonal" class="personal-tools"><button class="secondary" type="button" @click="openPersonalSettings">Редактировать книгу и страницы</button></div>
     <div class="tabs"><button :class="{ active: tab === 'all' }" @click="tab = 'all'">Все работы <small>{{ data.pages.length }}</small></button><button :class="{ active: tab === 'done' }" @click="tab = 'done'">Готово <small>{{ data.book.done }}</small></button><button :class="{ active: tab === 'left' }" @click="tab = 'left'">Осталось <small>{{ data.book.total - data.book.done }}</small></button></div>

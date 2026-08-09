@@ -8,6 +8,7 @@ from app import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/tracker/books/', views.tracker_books),
+    path('api/tracker/randomizer/', views.tracker_randomizer),
     path('api/tracker/personal-books/', views.tracker_personal_book_create),
     path('api/tracker/personal-books/<int:user_book_id>/', views.tracker_personal_book),
     path('api/tracker/personal-books/<int:user_book_id>/pages/', views.tracker_personal_pages),

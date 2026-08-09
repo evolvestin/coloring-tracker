@@ -18,6 +18,7 @@ from app.models import (
     ColoringPagePhoto,
     ColoringSuggestion,
     ColoringWork,
+    RandomizerRun,
     StarDonation,
     TrackerUser,
     UserBook,
@@ -292,6 +293,18 @@ class ColoringWorkAdmin(admin.ModelAdmin):
     list_display = ('user_book', 'page', 'completed_at', 'hide_in_report')
     list_filter = ('completed_at', 'user_book__book', 'hide_in_report')
     fields = ('user_book', 'page', 'completed_at', 'note', 'hide_in_report')
+
+
+@admin.register(RandomizerRun)
+class RandomizerRunAdmin(admin.ModelAdmin):
+    list_display = ('user', 'scope', 'page', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('user__display_name', 'user__username', 'page__book__title')
+    readonly_fields = ('user', 'user_book', 'page', 'created_at', 'updated_at')
+
+    @admin.display(description='Область')
+    def scope(self, run):
+        return run.user_book.book.title if run.user_book_id else 'Вся коллекция'
 
 
 @admin.register(ColoringPagePhoto)

@@ -15,6 +15,8 @@ from app.models import (
     ColoringBook,
     ColoringPage,
     ColoringSuggestion,
+    ColoringWork,
+    RandomizerRun,
     StarDonation,
     TrackerUser,
     UserBook,
@@ -203,6 +205,43 @@ class StarDonationTests(TransactionTestCase):
         self.assertEqual(donation.notification_message_id, 88)
         self.assertTrue(donation.notification_sent_at)
         self.assertIn('&lt;Фамилия&gt;', send_message.call_args.args[0])
+
+
+class RandomizerTests(TestCase):
+    @override_settings(DEBUG=True)
+    def test_randomizer_selects_unfinished_work_and_persists_cooldown(self):
+        user = TrackerUser.objects.create(session_key='randomizer-user')
+        book = ColoringBook.objects.create(title='Розы')
+        finished_page = ColoringPage.objects.create(book=book, number=1)
+        open_page = ColoringPage.objects.create(book=book, number=2)
+        user_book = UserBook.objects.create(user=user, book=book)
+        ColoringWork.objects.create(user_book=user_book, page=finished_page)
+
+        with patch('app.views.tracker_identity', return_value=user):
+            response = self.client.post('/api/tracker/randomizer/?dev=true')
+            limited = self.client.post('/api/tracker/randomizer/?dev=true')
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()['result']['page_id'], open_page.id)
+        self.assertEqual(RandomizerRun.objects.count(), 1)
+        self.assertEqual(limited.status_code, 429)
+        self.assertEqual(limited.json()['retry_after'], 3600)
+
+    @override_settings(DEBUG=True)
+    def test_book_scope_is_saved_in_randomizer_history(self):
+        user = TrackerUser.objects.create(session_key='randomizer-user')
+        book = ColoringBook.objects.create(title='Сад')
+        page = ColoringPage.objects.create(book=book, number=1)
+        user_book = UserBook.objects.create(user=user, book=book)
+
+        with patch('app.views.tracker_identity', return_value=user):
+            response = self.client.post(
+                f'/api/tracker/randomizer/?user_book_id={user_book.id}&dev=true'
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()['result']['page_id'], page.id)
+        self.assertEqual(RandomizerRun.objects.get().user_book_id, user_book.id)
 
 
 class PersonalBookTests(TestCase):

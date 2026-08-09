@@ -172,6 +172,25 @@ class ColoringWork(TimestampedModel):
         ]
 
 
+class RandomizerRun(TimestampedModel):
+    """A server-side randomizer launch and the page it selected."""
+
+    user = models.ForeignKey(TrackerUser, on_delete=models.CASCADE, related_name='randomizer_runs')
+    user_book = models.ForeignKey(
+        UserBook,
+        on_delete=models.CASCADE,
+        related_name='randomizer_runs',
+        null=True,
+        blank=True,
+    )
+    page = models.ForeignKey(ColoringPage, on_delete=models.CASCADE, related_name='randomizer_runs')
+
+    class Meta:
+        verbose_name = 'Запуск рандомизатора'
+        verbose_name_plural = 'Запуски рандомизатора'
+        ordering = ('-created_at',)
+
+
 class ColoringPagePhoto(TimestampedModel):
     """A user's photo of a page, kept even if its completion mark is removed."""
 

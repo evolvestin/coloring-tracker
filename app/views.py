@@ -1,7 +1,9 @@
 import hashlib
 import hmac
 import json
+import math
 import os
+import random
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, timedelta
@@ -28,6 +30,7 @@ from app.models import (
     ColoringPagePhoto,
     ColoringSuggestion,
     ColoringWork,
+    RandomizerRun,
     StarDonation,
     TrackerUser,
     UserBook,
@@ -36,6 +39,7 @@ from app.tasks import send_donation_notification, send_suggestion_notification
 
 REPORT_LAUNCH_DATE = date(2026, 8, 1)
 SUGGESTION_COOLDOWN_SECONDS = 30
+RANDOMIZER_COOLDOWN_SECONDS = 60 * 60
 SUGGESTION_TITLE_LIMIT = 500
 SUGGESTION_SOURCE_LIMIT = 100_000
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
@@ -262,6 +266,134 @@ def tracker_books(request):
         user_book, _ = UserBook.objects.get_or_create(book=book, user=user)
         return JsonResponse({'book': book_data(user_book)}, status=201)
     return JsonResponse({'books': [book_data(item) for item in user_books(request)]})
+
+
+def randomizer_result(request, run):
+    page = run.page
+    book = page.book
+    user_book_id = (
+        run.user_book_id
+        or UserBook.objects.filter(user=run.user, book_id=book.pk)
+        .values_list('pk', flat=True)
+        .first()
+    )
+    return {
+        'user_book_id': user_book_id,
+        'book_id': book.pk,
+        'book_title': book.title,
+        'book_author': book.author,
+        'book_cover': book.cover.url if book.cover else '',
+        'book_is_personal': book.is_personal,
+        'book_emoji': book.report_icon if book.is_personal else '',
+        'page_id': page.pk,
+        'page_label': page.label,
+        'page_title': page.title,
+    }
+
+
+def randomizer_status(request, now=None, user=None):
+    now = now or timezone.now()
+    user = user or tracker_identity(request)
+    runs = RandomizerRun.objects.filter(user=user)
+    last_run = runs.select_related('page__book').first()
+    if not last_run:
+        return {
+            'available': True,
+            'retry_after': 0,
+            'next_available_at': None,
+            'last_result': None,
+        }
+    next_available_at = last_run.created_at + timedelta(seconds=RANDOMIZER_COOLDOWN_SECONDS)
+    retry_after = max(0, math.ceil((next_available_at - now).total_seconds()))
+    return {
+        'available': retry_after == 0,
+        'retry_after': retry_after,
+        'next_available_at': next_available_at.isoformat(),
+        'last_result': randomizer_result(request, last_run),
+    }
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def tracker_randomizer(request):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    raw_scope = request.GET.get('user_book_id', '').strip()
+    if raw_scope:
+        try:
+            scope_user_book_id = int(raw_scope)
+        except ValueError:
+            return JsonResponse({'error': 'Некорректная книга для рандомизации.'}, status=400)
+    else:
+        scope_user_book_id = None
+
+    if request.method == 'GET':
+        if (
+            scope_user_book_id is not None
+            and not UserBook.objects.filter(pk=scope_user_book_id, user=user).exists()
+        ):
+            return JsonResponse({'error': 'Книга не найдена.'}, status=404)
+        return JsonResponse(randomizer_status(request, user=user))
+
+    with transaction.atomic():
+        locked_user = TrackerUser.objects.select_for_update().get(pk=user.pk)
+        target_user_book = None
+        if scope_user_book_id is not None:
+            target_user_book = get_object_or_404(
+                UserBook.objects.select_for_update().select_related('book'),
+                pk=scope_user_book_id,
+                user=locked_user,
+            )
+            candidate_pages = (
+                ColoringPage.objects.filter(book=target_user_book.book)
+                .exclude(works__user_book=target_user_book)
+                .select_related('book')
+            )
+        else:
+            target_books = list(
+                UserBook.objects.filter(user=locked_user).values_list('book_id', flat=True)
+            )
+            candidate_pages = (
+                ColoringPage.objects.filter(book_id__in=target_books)
+                .exclude(works__user_book__user=locked_user)
+                .select_related('book')
+                .distinct()
+            )
+
+        runs = RandomizerRun.objects.filter(user=locked_user)
+        last_run = runs.first()
+        now = timezone.now()
+        if last_run:
+            next_available_at = last_run.created_at + timedelta(seconds=RANDOMIZER_COOLDOWN_SECONDS)
+            retry_after = (next_available_at - now).total_seconds()
+            if retry_after > 0:
+                payload = randomizer_status(request, now, user=locked_user)
+                payload['error'] = 'Рандомизатор станет доступен позже.'
+                return JsonResponse(payload, status=429)
+
+        page = random.choice(list(candidate_pages)) if candidate_pages.exists() else None
+        if not page:
+            return JsonResponse(
+                {'error': 'В этой области пока нет незакрашенных работ.'}, status=409
+            )
+        run = RandomizerRun.objects.create(
+            user=locked_user,
+            user_book=target_user_book,
+            page=page,
+        )
+
+    next_available_at = run.created_at + timedelta(seconds=RANDOMIZER_COOLDOWN_SECONDS)
+    return JsonResponse(
+        {
+            'available': False,
+            'retry_after': RANDOMIZER_COOLDOWN_SECONDS,
+            'next_available_at': next_available_at.isoformat(),
+            'last_result': randomizer_result(request, run),
+            'result': randomizer_result(request, run),
+        },
+        status=201,
+    )
 
 
 @require_http_methods(['GET'])

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import DonationIcon from '../components/DonationIcon.vue'
 import { api } from '../api'
 
 const router = useRouter()
@@ -123,9 +124,9 @@ onMounted(load)
     </template>
     <template v-else>
       <div class="support-card">
-        <div class="support-card-title"><div><h2>Сколько подарить проекту?</h2><p>Разовая поддержка через Telegram Stars.</p></div><span class="stars-mark">★</span></div>
+        <div class="support-card-title"><div><h2>Сколько подарить проекту?</h2><p>Разовая поддержка через Telegram Stars.</p></div><span class="stars-mark"><DonationIcon /></span></div>
         <template v-if="config">
-          <div class="support-amounts" role="group" aria-label="Быстрый выбор суммы"><button v-for="amount in amounts" :key="amount" type="button" :class="{ selected: !customAmount && selectedAmount === amount }" @click="selectPreset(amount)"><span>★</span>{{ amount }}</button></div>
+          <div class="support-amounts" role="group" aria-label="Быстрый выбор суммы"><button v-for="amount in amounts" :key="amount" type="button" :class="{ selected: !customAmount && selectedAmount === amount }" @click="selectPreset(amount)"><DonationIcon />{{ amount }}</button></div>
           <label class="support-custom-amount">Своя сумма <span><input v-model="customAmount" type="number" min="1" max="10000" step="1" inputmode="numeric" placeholder="Например, 37"><b>Stars</b></span></label>
         </template>
         <div v-else class="support-loading">Сейчас всё подготовим…</div>
@@ -137,7 +138,7 @@ onMounted(load)
       </div>
     </template>
 
-    <transition name="modal"><div v-if="stage === 'test-checkout'" class="modal-backdrop" @click.self="reset"><section class="support-test-modal" role="dialog" aria-modal="true" aria-labelledby="support-test-title"><button class="modal-close" aria-label="Закрыть" @click="reset">×</button><div class="test-ticket"><span>★</span><b>{{ currentDonation?.amount }}</b><small>Stars · демо</small></div><p class="eyebrow">НЕБОЛЬШАЯ ПРОВЕРКА</p><h2 id="support-test-title">Посмотрим, как всё будет?</h2><p>Это только демонстрация: Telegram не откроется, деньги и Stars не списываются. Можно просто увидеть финальную анимацию.</p><button class="primary support-submit" :disabled="busy" @click="completeTestDonation">{{ busy ? 'Секундочку…' : 'Показать благодарность' }}</button><button class="support-cancel" :disabled="busy" @click="reset">Не сейчас</button></section></div></transition>
+    <transition name="modal"><div v-if="stage === 'test-checkout'" class="modal-backdrop" @click.self="reset"><section class="support-test-modal" role="dialog" aria-modal="true" aria-labelledby="support-test-title"><button class="modal-close" aria-label="Закрыть" @click="reset">×</button><div class="test-ticket"><DonationIcon /><b>{{ currentDonation?.amount }}</b><small>Stars · демо</small></div><p class="eyebrow">НЕБОЛЬШАЯ ПРОВЕРКА</p><h2 id="support-test-title">Посмотрим, как всё будет?</h2><p>Это только демонстрация: Telegram не откроется, деньги и Stars не списываются. Можно просто увидеть финальную анимацию.</p><button class="primary support-submit" :disabled="busy" @click="completeTestDonation">{{ busy ? 'Секундочку…' : 'Показать благодарность' }}</button><button class="support-cancel" :disabled="busy" @click="reset">Не сейчас</button></section></div></transition>
     <div v-if="stage === 'waiting'" class="support-toast">Возвращаемся с новостями…</div>
     <div v-if="stage === 'pending'" class="support-pending"><span>⌁</span><div><b>Telegram ещё подтверждает оплату</b><small>Это может занять немного времени. Мы сохранили всё и дождёмся подтверждения.</small></div><button class="support-cancel" @click="reset">Хорошо</button></div>
   </section>

@@ -2,6 +2,7 @@
 import '../report.css'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import DonationIcon from '../components/DonationIcon.vue'
 import { useTrackerStore } from '../stores/tracker'
 import { formatCount } from '../pluralize'
 
@@ -127,7 +128,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <button class="support-invite" type="button" @click="router.push('/support')"><span class="support-invite-icon">✾</span><span><b>Помочь трекеру расти</b><small>Если вам здесь уютно, можно оставить немного Stars — это необязательно, но очень помогает.</small></span><i>›</i></button>
+    <button class="support-invite" type="button" @click="router.push('/support')"><span class="support-invite-icon"><DonationIcon /></span><span><b>Помочь трекеру расти</b><small>Если вам здесь уютно, можно оставить немного Stars — это необязательно, но очень помогает.</small></span><i>›</i></button>
     <p v-if="loading && !report" class="muted">Загружаем отчёт…</p>
     <template v-else-if="report?.month">
       <div class="report-card">
