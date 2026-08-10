@@ -48,7 +48,7 @@ function tick() {
 }
 
 function openConfirm() {
-  if (!statusLoaded.value || isBusy.value || (!status.value.available && remaining.value > 0)) return
+  if (!statusLoaded.value || isBusy.value) return
   error.value = ''
   dialog.value = 'confirm'
 }
@@ -90,11 +90,11 @@ onBeforeUnmount(() => window.clearInterval(timer))
 
 <template>
   <div :class="['randomizer-widget', { compact }]">
-    <button class="randomizer-launch" type="button" :disabled="!statusLoaded || isBusy || (!status.available && remaining > 0)" :aria-label="!statusLoaded ? 'Загружаем выбор работы' : status.available ? 'Выбрать работу наугад' : `Следующий выбор через ${cooldownLabel}`" :title="!statusLoaded ? 'Загружаем выбор работы' : status.available ? 'Выбрать работу наугад' : `Следующий выбор через ${cooldownLabel}`" @click="openConfirm">
+    <button class="randomizer-launch" type="button" :disabled="!statusLoaded || isBusy" :aria-label="!statusLoaded ? 'Загружаем выбор работы' : status.available ? 'Выбрать работу наугад' : `Следующий выбор через ${cooldownLabel}`" :title="!statusLoaded ? 'Загружаем выбор работы' : status.available ? 'Выбрать работу наугад' : `Следующий выбор через ${cooldownLabel}`" @click="openConfirm">
       <span class="randomizer-die" :class="{ rolling: isBusy }" aria-hidden="true">
         <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="16" cy="16" r="3" fill="currentColor"/><circle cx="32" cy="16" r="3" fill="currentColor"/><circle cx="24" cy="24" r="3" fill="currentColor"/><circle cx="16" cy="32" r="3" fill="currentColor"/><circle cx="32" cy="32" r="3" fill="currentColor"/></svg>
       </span>
-      <small>{{ !statusLoaded ? '…' : status.available ? '' : cooldownLabel }}</small>
+      <small v-if="!status.available && remaining > 0">{{ cooldownLabel }}</small>
     </button>
   </div>
 
@@ -104,13 +104,13 @@ onBeforeUnmount(() => window.clearInterval(timer))
         <button class="modal-close" aria-label="Закрыть" @click="dialog = null">×</button>
         <div class="randomizer-modal-die"><span class="randomizer-die"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="16" cy="16" r="3" fill="currentColor"/><circle cx="32" cy="16" r="3" fill="currentColor"/><circle cx="24" cy="24" r="3" fill="currentColor"/><circle cx="16" cy="32" r="3" fill="currentColor"/><circle cx="32" cy="32" r="3" fill="currentColor"/></svg></span></div>
         <p class="eyebrow">СЛУЧАЙНЫЙ ВЫБОР</p>
-        <h2 id="randomizer-confirm-title">Выбрать работу?</h2>
-        <p>Я выберу одну незакрашенную работу {{ userBookId ? 'из этой раскраски' : 'из всей коллекции' }}.</p>
+        <h2 id="randomizer-confirm-title">{{ status.available ? 'Выбрать работу?' : 'Работа уже выбрана' }}</h2>
+        <p>{{ status.available ? `Я выберу одну незакрашенную работу ${userBookId ? 'из этой раскраски' : 'из всей коллекции'}.` : 'Новую работу можно будет выбрать после окончания таймера.' }}</p>
         <p v-if="!userBookId" class="randomizer-hint">Если хочется выбрать работу из одной раскраски, откройте её — внутри есть отдельный выбор.</p>
         <p v-if="lastResult" class="randomizer-last">В прошлый раз: <b>{{ lastResult.book_title }}</b> · {{ lastResult.page_label }}</p>
         <p v-if="!status.available && remaining > 0" class="randomizer-timer" role="status">Следующий выбор через <b>{{ cooldownLabel }}</b></p>
         <p v-if="error" class="randomizer-error" role="alert">{{ error }}</p>
-        <div class="confirm-actions"><button class="secondary" type="button" @click="dialog = null">Не сейчас</button><button class="primary" type="button" @click="launch">Выбрать</button></div>
+        <div class="confirm-actions"><button class="secondary" type="button" @click="dialog = null">Закрыть</button><button class="primary" type="button" :disabled="!status.available" @click="launch">{{ status.available ? 'Выбрать' : 'Ожидаем' }}</button></div>
       </section>
     </div>
   </transition>

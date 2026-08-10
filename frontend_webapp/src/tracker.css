@@ -123,13 +123,13 @@ html .randomizer-copy{min-width:0}.randomizer-heading{display:flex;align-items:c
 /* Компактная кнопка выбора в шапке; подробности открываются только по нажатию. */
 html .header-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex:none}
 html .randomizer-widget{display:flex;align-items:center;flex:none}
-html .randomizer-widget .randomizer-launch{display:inline-flex;align-items:center;justify-content:center;gap:0;width:46px;min-width:46px;height:46px;padding:0;border:1px solid #f0d0dc;border-radius:15px;background:#fffafd;color:#c85f89;box-shadow:0 6px 15px #bc718014}
-html .randomizer-widget .randomizer-launch small{font-size:9px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:.1px}
+html .randomizer-widget .randomizer-launch{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:0;width:46px;min-width:46px;height:46px;padding:0;border:1px solid #f0d0dc;border-radius:15px;background:#fffafd;color:#c85f89;box-shadow:0 6px 15px #bc718014}
+html .randomizer-widget .randomizer-launch small{position:absolute;z-index:1;top:33px;left:50%;transform:translateX(-50%);padding:2px 4px;border:1px solid #f0d0dc;border-radius:6px;background:#fffafd;color:#c85f89;font-size:8px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:0;white-space:nowrap;box-shadow:0 2px 5px #bc718014;pointer-events:none}
 html .randomizer-widget .randomizer-die{width:35px;height:35px;border-radius:0;box-shadow:none}
 html .randomizer-widget .randomizer-die svg{width:31px;height:31px}
 html .randomizer-widget .randomizer-launch:active{transform:scale(.95)}
 html .book-view .randomizer-widget{margin-bottom:18px}
-@media(max-width:390px){html .randomizer-widget .randomizer-launch{min-width:43px;height:43px;padding:3px 5px}html .randomizer-widget .randomizer-die{width:33px;height:33px;border-radius:10px}html .randomizer-widget .randomizer-die svg{width:29px;height:29px}}
+@media(max-width:390px){html .randomizer-widget .randomizer-launch{width:43px;min-width:43px;height:43px;padding:0}html .randomizer-widget .randomizer-launch small{top:31px;font-size:7px}html .randomizer-widget .randomizer-die{width:33px;height:33px;border-radius:0}html .randomizer-widget .randomizer-die svg{width:29px;height:29px}}
 
 /* Поддержка проекта: заметный, но спокойный путь к Stars. */
 html .support-invite{width:100%;display:grid;grid-template-columns:42px minmax(0,1fr) 20px;align-items:center;gap:10px;margin:16px 0 21px;padding:11px 13px;border:1px solid #efd0db;border-radius:19px;background:linear-gradient(135deg,#fffdf4,#fff0f6);color:#684252;text-align:left;cursor:pointer;box-shadow:0 8px 20px #bc718014;transition:transform .2s,box-shadow .2s}
