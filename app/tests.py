@@ -23,6 +23,7 @@ from app.models import (
 )
 from app.page_import import parse_pages_json, sync_book_pages
 from app.tasks import (
+    retry_pending_donation_notifications,
     send_donation_notification,
     send_suggestion_notification,
     suggestion_notification_text,
@@ -205,6 +206,19 @@ class StarDonationTests(TransactionTestCase):
         self.assertEqual(donation.notification_message_id, 88)
         self.assertTrue(donation.notification_sent_at)
         self.assertIn('&lt;Фамилия&gt;', send_message.call_args.args[0])
+        self.assertIn('https://t.me/supporter', send_message.call_args.args[0])
+
+    @patch('app.tasks.send_donation_notification.delay')
+    def test_pending_donation_notification_is_requeued(self, enqueue):
+        user = TrackerUser.objects.create(telegram_id=876543)
+        pending = StarDonation.objects.create(user=user, amount=10, status='succeeded')
+        sent = StarDonation.objects.create(user=user, amount=50, status='succeeded')
+        sent.notification_sent_at = timezone.now()
+        sent.save(update_fields=('notification_sent_at', 'updated_at'))
+        StarDonation.objects.create(user=user, amount=100, is_test=True, status='succeeded')
+
+        self.assertEqual(retry_pending_donation_notifications(), 1)
+        enqueue.assert_called_once_with(pending.pk)
 
 
 class RandomizerTests(TestCase):

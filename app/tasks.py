@@ -115,10 +115,12 @@ def donation_notification_text(donation):
     username = html.escape(
         (f'@{user.username}' if user.username else 'без username')[:300], quote=False
     )
+    # ``tg://user`` is not consistently clickable in group/channel messages.
+    # A public username gives moderators a portable, working profile link.
     user_link = (
-        f'<a href="tg://user?id={user.telegram_id}">Открыть профиль</a>'
-        if user.telegram_id
-        else 'Профиль пользователя недоступен в Telegram'
+        f'<a href="https://t.me/{html.escape(user.username, quote=True)}">Открыть профиль</a>'
+        if user.username
+        else 'Профиль пользователя недоступен: нет username'
     )
     return (
         '✨ <b>Новая поддержка проекта</b>\n\n'
@@ -160,3 +162,16 @@ def send_donation_notification(donation_id):
         )
     )
     return True
+
+
+@shared_task
+def retry_pending_donation_notifications():
+    """Requeue notifications missed while Redis or Telegram was unavailable."""
+    donation_ids = StarDonation.objects.filter(
+        status=StarDonation.STATUS_SUCCEEDED,
+        is_test=False,
+        notification_sent_at__isnull=True,
+    ).values_list('pk', flat=True)[:100]
+    for donation_id in donation_ids:
+        send_donation_notification.delay(donation_id)
+    return len(donation_ids)

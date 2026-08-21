@@ -66,11 +66,22 @@ DATABASES = {
     }
 }
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
+# Tasks are fire-and-forget: neither the bot nor the web application reads their
+# return values.  Keeping a Redis result backend made publishing a notification
+# depend on a second, unnecessary Redis connection in the bot process.
+CELERY_RESULT_BACKEND = None
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BROKER_CONNECTION_RETRY = True
+CELERY_TASK_PUBLISH_RETRY = True
 CELERY_BEAT_SCHEDULE = {
     'daily-google-drive-postgresql-backup': {
         'task': 'app.tasks.backup_tracker_database',
         'schedule': 86400.0,
+    },
+    'retry-pending-donation-notifications': {
+        'task': 'app.tasks.retry_pending_donation_notifications',
+        'schedule': 300.0,
     },
 }
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
