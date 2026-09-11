@@ -3,7 +3,7 @@ import json
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
-from django.db.models import Case, IntegerField, Prefetch, Value, When
+from django.db.models import Case, Count, IntegerField, Prefetch, Value, When
 from django.forms.utils import flatatt
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
@@ -26,6 +26,18 @@ from app.models import (
 from app.page_import import ColoringBookPagesImportForm, sync_book_pages
 
 
+def icon_count_label(count):
+    number = abs(count) % 100
+    last_digit = number % 10
+    if 11 <= number <= 19 or last_digit == 0 or last_digit >= 5:
+        word = 'раз'
+    elif last_digit == 1:
+        word = 'раз'
+    else:
+        word = 'раза'
+    return f'{count} {word}'
+
+
 class FlowerIconSelect(forms.Select):
     class Media:
         css = {'all': ('app/admin/flower-icon-picker.css',)}
@@ -35,14 +47,15 @@ class FlowerIconSelect(forms.Select):
         final_attrs = self.build_attrs(self.attrs, attrs)
         input_id = final_attrs.get('id', name)
         current_value = '' if value is None else str(value)
-        unused_icons = set(self.attrs.get('data-unused-icons', []))
+        icon_counts = self.attrs.get('data-icon-counts', {})
         options = []
 
         for option_value, option_label in self.choices:
             option_value = '' if option_value is None else str(option_value)
             selected = option_value == current_value
-            is_unused = bool(option_value and option_value in unused_icons)
-            state = 'свободен' if is_unused else 'уже используется'
+            count = int(icon_counts.get(option_value, 0)) if option_value else 0
+            is_unused = bool(option_value and count == 0)
+            state = 'свободен' if is_unused else f'используется {icon_count_label(count)}'
             classes = 'flower-icon-option'
             if selected:
                 classes += ' is-selected'
@@ -50,6 +63,7 @@ class FlowerIconSelect(forms.Select):
                 classes += ' is-unused'
             label = 'Без значка' if not option_value else option_label
             aria_label = label if not option_value else f'{label} — {state}'
+            count_label = '' if not option_value else icon_count_label(count)
             options.append(
                 format_html(
                     '<button type="button" class="{}" data-value="{}" '
@@ -61,7 +75,7 @@ class FlowerIconSelect(forms.Select):
                     'true' if selected else 'false',
                     aria_label,
                     label,
-                    'свободен' if is_unused else ('выбран' if selected else ''),
+                    f'выбран · {count_label}' if selected else count_label,
                 )
             )
 
@@ -84,20 +98,30 @@ class FlowerIconSelect(forms.Select):
 class ColoringBookAdminForm(forms.ModelForm):
     class Meta:
         model = ColoringBook
-        fields = '__all__'
+        fields = (
+            'title',
+            'owner',
+            'author',
+            'publisher',
+            'cover',
+            'description',
+            'is_published',
+            'report_icon',
+        )
         widgets = {'report_icon': FlowerIconSelect}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        used_icons = set(
+        icon_counts = dict(
             ColoringBook.objects.filter(owner__isnull=True)
-            .exclude(pk=self.instance.pk)
             .exclude(report_icon='')
-            .values_list('report_icon', flat=True)
+            .values('report_icon')
+            .annotate(total=Count('pk'))
+            .values_list('report_icon', 'total')
         )
-        self.fields['report_icon'].widget.attrs['data-unused-icons'] = [
-            icon for icon in FLOWER_ICONS if icon not in used_icons
-        ]
+        self.fields['report_icon'].widget.attrs['data-icon-counts'] = icon_counts
+        self.fields['cover'].label = 'Обложка'
+        self.fields['cover'].help_text = 'Загрузите один файл. Превью для каталога создастся автоматически.'
 
 
 class ColoringPageFormSet(forms.BaseInlineFormSet):
@@ -208,6 +232,14 @@ class ColoringBookAdmin(admin.ModelAdmin):
         # `_source_order` is added in get_queryset(), so it cannot be passed
         # to ModelAdmin.get_queryset() before the annotation exists.
         return super().get_ordering(request) if request.GET.get('o') else ()
+
+    def save_model(self, request, obj, form, change):
+        # cover_original is an internal source for the image editor, not a
+        # second upload. Admin uploads are already the source image, so the
+        # API falls back to cover when no editor-specific source exists.
+        if 'cover' in form.changed_data:
+            obj.cover_original = ''
+        super().save_model(request, obj, form, change)
 
     @admin.display(description='Источник')
     def source_badge(self, book):

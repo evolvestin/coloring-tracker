@@ -355,15 +355,22 @@
     if (endInputB) rowB.dataset.savedSpreadEnd = endInputB.value;
     if (titleInputB) rowB.dataset.savedTitle = titleInputB.value;
 
+    // Django renders deletion differently for existing and new forms. Use
+    // its native control in both cases: existing rows get DELETE=on, while a
+    // new row is removed and TOTAL_FORMS is updated.
     const delInput = rowB.querySelector('input[id$="-DELETE"]');
     if (delInput) {
       delInput.checked = true;
       delInput.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+      const deleteLink = rowB.querySelector('.inline-deletelink');
+      if (deleteLink) deleteLink.click();
     }
 
-    if (endInputB) endInputB.value = '';
-    if (titleInputB) titleInputB.value = '';
-
+    // Keep every value in the deleted form. Django's formset can then clean
+    // the row normally, while the checked DELETE field removes it on save.
+    // Clearing required inputs here made the browser/admin report a phantom
+    // validation error and suggested deleting a row that was already merged.
     rowB.style.display = 'none';
 
     updateTableActions();

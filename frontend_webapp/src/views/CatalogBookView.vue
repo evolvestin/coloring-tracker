@@ -8,6 +8,17 @@ import { useTrackerStore } from '../stores/tracker'
 const route = useRoute(), router = useRouter(), trackerStore = useTrackerStore()
 const data = ref(null), adding = ref(false)
 async function load() { data.value = await api(`/api/tracker/catalog/${route.params.id}/`) }
+function upgradeCover(event) {
+  const image = event.currentTarget
+  const fullSrc = image.dataset.fullSrc
+  if (!fullSrc || image.dataset.upgraded === 'true') return
+  image.dataset.upgraded = 'true'
+  const fullImage = new Image()
+  fullImage.decoding = 'async'
+  fullImage.onload = () => { image.src = fullSrc }
+  fullImage.onerror = () => { delete image.dataset.upgraded }
+  fullImage.src = fullSrc
+}
 async function add() {
   if (adding.value) return
   adding.value = true
@@ -28,7 +39,7 @@ onMounted(load)
   <section v-if="data" class="page catalog-book-view">
     <header><button class="back" aria-label="Назад" @click="router.back()"><svg viewBox="0 0 24 24" fill="none"><path d="m14.5 5-7 7 7 7"/></svg></button><div><p class="eyebrow">ПРОСМОТР РАСКРАСКИ</p><h1>{{ data.book.title }}</h1><p>{{ data.book.author || 'Раскраска' }}</p></div></header>
     <div class="catalog-book-intro">
-      <img v-if="data.book.cover" :src="data.book.cover" :alt="data.book.title">
+      <img v-if="data.book.cover_preview || data.book.cover" :src="data.book.cover_preview || data.book.cover" :data-full-src="data.book.cover" :alt="data.book.title" decoding="async" @load="upgradeCover">
       <div v-else class="cover-placeholder" aria-label="Обложка пока не добавлена">❀</div>
       <div>
         <p v-if="data.book.publisher" class="catalog-publisher">{{ data.book.publisher }}</p>

@@ -226,7 +226,7 @@ def user_books(request):
 
 
 def book_data(user_book):
-    total = user_book.book.pages.count()
+    total = user_book.book.total_pages_count
     completed = user_book.works.count()
     return {
         'id': user_book.id,
@@ -234,6 +234,9 @@ def book_data(user_book):
         'title': user_book.book.title,
         'author': user_book.book.author,
         'cover': user_book.book.cover.url if user_book.book.cover else '',
+        'cover_preview': (
+            user_book.book.cover_preview.url if user_book.book.cover_preview else ''
+        ),
         'cover_source': (
             user_book.book.cover_original.url
             if user_book.book.cover_original
@@ -399,8 +402,9 @@ def tracker_randomizer(request):
 @require_http_methods(['GET'])
 def tracker_catalog(request):
     user = tracker_identity(request)
-    owned = set(user_books(request).values_list('book_id', flat=True)) if user else set()
-    collection = {item.book_id: item for item in user_books(request)} if user else {}
+    collection_books = list(user_books(request)) if user else []
+    owned = {item.book_id for item in collection_books}
+    collection = {item.book_id: item for item in collection_books}
     query = request.GET.get('q', '').strip()
     catalogue = ColoringBook.objects.filter(owner__isnull=True, is_published=True).prefetch_related(
         'pages'
@@ -417,6 +421,7 @@ def tracker_catalog(request):
                     'title': book.title,
                     'author': book.author,
                     'cover': book.cover.url if book.cover else '',
+                    'cover_preview': book.cover_preview.url if book.cover_preview else '',
                     'pages': book.total_pages_count,
                     'spreads': book.spreads_count,
                     'owned': book.id in owned,
@@ -446,6 +451,7 @@ def tracker_catalog_book_detail(request, book_id):
                 'publisher': book.publisher,
                 'description': book.description,
                 'cover': book.cover.url if book.cover else '',
+                'cover_preview': book.cover_preview.url if book.cover_preview else '',
                 'pages': book.total_pages_count,
                 'spreads': book.spreads_count,
             },

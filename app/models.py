@@ -35,6 +35,47 @@ FLOWER_ICONS = (
     '🍂',
     '🍄',
     '🌰',
+    '🐶',
+    '🐱',
+    '🐭',
+    '🐹',
+    '🐰',
+    '🦊',
+    '🐻',
+    '🐼',
+    '🐨',
+    '🐯',
+    '🦁',
+    '🐮',
+    '🐷',
+    '🐸',
+    '🐵',
+    '🙈',
+    '🙉',
+    '🙊',
+    '🐔',
+    '🐧',
+    '🐦',
+    '🦄',
+    '🐝',
+    '🐞',
+    '🐢',
+    '🐍',
+    '🦎',
+    '🐙',
+    '🦀',
+    '🐳',
+    '🐬',
+    '🐠',
+    '🐟',
+    '🦈',
+    '🐊',
+    '🦖',
+    '🦕',
+    '🌈',
+    '☀️',
+    '🌙',
+    '⭐',
 )
 FLOWER_ICON_CHOICES = [(icon, icon) for icon in FLOWER_ICONS]
 
@@ -81,6 +122,9 @@ class ColoringBook(TimestampedModel):
     cover = models.ImageField('Обложка', upload_to='books/covers/', blank=True)
     cover_original = models.ImageField(
         'Исходник обложки', upload_to='books/cover-originals/', blank=True
+    )
+    cover_preview = models.ImageField(
+        'Превью обложки', upload_to='books/cover-previews/', blank=True, editable=False
     )
     description = models.TextField('Описание', blank=True)
     is_published = models.BooleanField('Опубликована', default=True)
