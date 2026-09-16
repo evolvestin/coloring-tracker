@@ -11,7 +11,6 @@ from django.urls import path, reverse
 from django.utils.html import format_html, mark_safe
 
 from app.models import (
-    FLOWER_ICONS,
     ColoringBook,
     ColoringColorCode,
     ColoringPage,
@@ -20,6 +19,8 @@ from app.models import (
     ColoringWork,
     RandomizerRun,
     StarDonation,
+    TelegramBackup,
+    TelegramBackupPart,
     TrackerUser,
     UserBook,
 )
@@ -471,6 +472,48 @@ class StarDonationAdmin(admin.ModelAdmin):
             if donation.notification_error
             else 'В очереди'
         )
+
+
+class TelegramBackupPartInline(admin.TabularInline):
+    model = TelegramBackupPart
+    extra = 0
+    readonly_fields = (
+        'part_number',
+        'filename',
+        'size_bytes',
+        'sha256',
+        'message_id',
+        'file_id',
+        'file_unique_id',
+    )
+
+
+@admin.register(TelegramBackup)
+class TelegramBackupAdmin(admin.ModelAdmin):
+    list_display = (
+        'created_at',
+        'source_filename',
+        'size_bytes',
+        'part_count',
+        'status',
+        'manifest_file_id',
+    )
+    list_filter = ('status', 'created_at')
+    search_fields = ('source_filename', 'manifest_file_id', 'sha256')
+    readonly_fields = (
+        'id',
+        'source_filename',
+        'size_bytes',
+        'sha256',
+        'part_count',
+        'manifest_message_id',
+        'manifest_file_id',
+        'status',
+        'error_message',
+        'created_at',
+        'updated_at',
+    )
+    inlines = (TelegramBackupPartInline,)
 
 
 @admin.register(TrackerUser)

@@ -64,7 +64,10 @@ Vite, Celery и бота. Reverse proxy и туннелирование не и�
 ## Конфигурация и проверка
 
 - Не коммитьте `.env`, `data/`, `node_modules/` и `dist/`.
-- Переменная `GOOGLE_DRIVE_BACKUP_FILENAME` обязательна и не имеет значения по умолчанию.
+- Для Telegram-бекапа задаются `TELEGRAM_BACKUP_ENABLED`,
+  основной `TELEGRAM_BOT_TOKEN`, `TELEGRAM_API_ID` и `TELEGRAM_API_HASH`.
+  ID канала и стабильные параметры протокола хранятся в
+  `coloring_tracker/backup_constants.py`.
 - После изменения моделей выполняйте `python manage.py makemigrations app`.
 - Перед сдачей запускайте:
 

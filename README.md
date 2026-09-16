@@ -15,6 +15,31 @@ Vue отвечает за WebApp-интерфейс.
 
 Compose запускает PostgreSQL, Redis, Django, Vite, Celery и Telegram-бота.
 
+## Telegram-бекап PostgreSQL
+
+Бекап хранится в приватном Telegram-канале отдельным backup-ботом. Интеграция
+отключена по умолчанию, пока канал не создан. После создания канала добавьте
+бота администратором с правами отправки, удаления и редактирования документов.
+ID канала задаётся только в `coloring_tracker/backup_constants.py`.
+Заполните в `.env` `TELEGRAM_BACKUP_ENABLED=true`,
+`TELEGRAM_API_ID` и `TELEGRAM_API_HASH`. Для Telegram-бекапа используется
+основной `TELEGRAM_BOT_TOKEN`, затем проверьте доступ:
+
+```bash
+docker compose run --rm web python manage.py telegram_backup_healthcheck
+docker compose run --rm worker python manage.py backupdb
+```
+
+Каждый бекап публикуется как части PostgreSQL custom dump и JSON manifest.
+Для восстановления нужен `file_id` manifest и явное подтверждение:
+
+```bash
+docker compose run --rm web python manage.py restoredb <manifest-file-id> --confirm
+```
+
+Manifest можно восстановить даже без локальных записей индекса. Старые команды
+`backup_tracker_database` и `restore_tracker_backup` сохранены как алиасы.
+
 После восстановления базы или медиа на продакшене пересоберите все маленькие
 превью обложек командой:
 

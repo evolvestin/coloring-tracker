@@ -3,6 +3,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from coloring_tracker import backup_constants
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'unsafe-development-key')
@@ -75,7 +77,7 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BROKER_CONNECTION_RETRY = True
 CELERY_TASK_PUBLISH_RETRY = True
 CELERY_BEAT_SCHEDULE = {
-    'daily-google-drive-postgresql-backup': {
+    'daily-telegram-postgresql-backup': {
         'task': 'app.tasks.backup_tracker_database',
         'schedule': 86400.0,
     },
@@ -84,6 +86,19 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 300.0,
     },
 }
+
+TELEGRAM_BACKUP_ENABLED = os.getenv('TELEGRAM_BACKUP_ENABLED', '0').lower() in (
+    '1',
+    'true',
+    'yes',
+)
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+TELEGRAM_BACKUP_CHAT_ID = backup_constants.TELEGRAM_BACKUP_CHAT_ID
+TELEGRAM_BACKUP_API_BASE_URL = backup_constants.TELEGRAM_BACKUP_API_BASE_URL
+TELEGRAM_BACKUP_LOCAL_FILE_MODE = backup_constants.TELEGRAM_BACKUP_LOCAL_FILE_MODE
+TELEGRAM_BACKUP_PART_SIZE_BYTES = backup_constants.TELEGRAM_BACKUP_PART_SIZE_BYTES
+TELEGRAM_BACKUP_SHARED_DIR = backup_constants.TELEGRAM_BACKUP_SHARED_DIR
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'data' / 'staticfiles'

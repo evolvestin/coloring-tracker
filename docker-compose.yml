@@ -34,6 +34,8 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
     volumes:
       - ./data:/app/data
+      - telegram_backup_data:/var/lib/coloring-tracker/telegram-backups
+      - telegram_bot_api_data:/var/lib/telegram-bot-api:ro
       - ./app:/app/app
       - ./coloring_tracker:/app/coloring_tracker
       - ./templates:/app/templates
@@ -71,6 +73,8 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
     volumes:
       - ./data:/app/data
+      - telegram_backup_data:/var/lib/coloring-tracker/telegram-backups
+      - telegram_bot_api_data:/var/lib/telegram-bot-api:ro
       - ./app:/app/app
       - ./coloring_tracker:/app/coloring_tracker
       - ./templates:/app/templates
@@ -96,6 +100,8 @@ services:
         condition: service_completed_successfully
       frontend:
         condition: service_started
+      telegram-bot-api:
+        condition: service_started
 
   worker:
     build: .
@@ -106,6 +112,8 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
     volumes:
       - ./data:/app/data
+      - telegram_backup_data:/var/lib/coloring-tracker/telegram-backups
+      - telegram_bot_api_data:/var/lib/telegram-bot-api:ro
       - ./app:/app/app
       - ./coloring_tracker:/app/coloring_tracker
       - ./manage.py:/app/manage.py
@@ -114,6 +122,8 @@ services:
       app-init:
         condition: service_completed_successfully
       redis:
+        condition: service_started
+      telegram-bot-api:
         condition: service_started
 
   beat:
@@ -135,6 +145,25 @@ services:
       redis:
         condition: service_started
 
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api@sha256:a6cbb08dd181df11bbe4dc71ab8d74a6c97e0c1fa148f5c7c617affca42de9ef
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$${TELEGRAM_API_ID:-}" ] || [ -z "$${TELEGRAM_API_HASH:-}" ]; then
+          echo "Local Telegram Bot API is disabled: TELEGRAM_API_ID/HASH are not configured";
+          exec tail -f /dev/null;
+        fi
+        exec /docker-entrypoint.sh
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+      TELEGRAM_LOCAL: "1"
+    volumes:
+      - telegram_bot_api_data:/var/lib/telegram-bot-api
+      - telegram_backup_data:/var/lib/coloring-tracker/telegram-backups
+
   bot:
     build: .
     restart: unless-stopped
@@ -152,3 +181,5 @@ volumes:
   pgdata:
     name: ${PG_VOLUME_NAME:-coloring_tracker_pgdata}
   frontend_node_modules:
+  telegram_bot_api_data:
+  telegram_backup_data:

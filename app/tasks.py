@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 
 @shared_task
 def backup_tracker_database():
-    """Run the database backup command in a Celery worker."""
+    """Run the Telegram database backup command in a Celery worker."""
     output = StringIO()
-    call_command('backup_tracker_database', stdout=output)
+    call_command('backupdb', stdout=output)
     return output.getvalue().strip()
 
 
