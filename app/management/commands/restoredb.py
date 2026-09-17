@@ -1,6 +1,8 @@
 import os
+import shutil
 import subprocess
 import tempfile
+import zipfile
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -12,6 +14,7 @@ from app.telegram_backup import (
     TelegramBackupError,
     download_backup,
     download_manifest_backup,
+    extract_backup_archive,
 )
 
 
@@ -43,6 +46,7 @@ class Command(BaseCommand):
             manifest_file_id = reference.strip()
         fd, path = tempfile.mkstemp(suffix='.dump')
         os.close(fd)
+        extract_dir = tempfile.mkdtemp(prefix='restore-archive-')
         try:
             try:
                 if manifest_file_id:
@@ -53,6 +57,10 @@ class Command(BaseCommand):
                 raise CommandError(f'Telegram restore download failed: {error}') from error
 
             database = settings.DATABASES['default']
+            db_restore_path = path
+            extracted_media_dir = None
+            if zipfile.is_zipfile(path):
+                db_restore_path, extracted_media_dir = extract_backup_archive(path, extract_dir)
             restore_environment = {
                 **os.environ,
                 'PGPASSWORD': database.get('PASSWORD', ''),
@@ -69,7 +77,7 @@ class Command(BaseCommand):
                         '--no-owner',
                         '--dbname',
                         database['NAME'],
-                        path,
+                        db_restore_path,
                     ],
                     env=restore_environment,
                     capture_output=True,
@@ -81,10 +89,23 @@ class Command(BaseCommand):
                 ) from error
             if result.returncode:
                 raise CommandError('pg_restore failed: ' + result.stderr[-500:])
+            if extracted_media_dir is not None:
+                self._restore_media(extracted_media_dir)
             self.stdout.write(self.style.SUCCESS('Restore complete'))
         finally:
             if os.path.exists(path):
                 os.unlink(path)
+            shutil.rmtree(extract_dir, ignore_errors=True)
+
+    @staticmethod
+    def _restore_media(source_dir):
+        media_root = settings.MEDIA_ROOT
+        media_root.mkdir(parents=True, exist_ok=True)
+        for source in source_dir.rglob('*'):
+            if source.is_file():
+                destination = media_root / source.relative_to(source_dir)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
 
     def _select_backup(self, reference):
         if not reference:

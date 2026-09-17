@@ -30,14 +30,16 @@ docker compose run --rm web python manage.py telegram_backup_healthcheck
 docker compose run --rm worker python manage.py backupdb
 ```
 
-Каждый бекап публикуется как части PostgreSQL custom dump и JSON manifest.
+Каждый бекап публикуется как части ZIP-архива с PostgreSQL custom dump (`db.dump`)
+и файлами `data/media`, а также JSON manifest.
 Для восстановления нужен `file_id` manifest и явное подтверждение:
 
 ```bash
 docker compose run --rm web python manage.py restoredb <manifest-file-id> --confirm
 ```
 
-Manifest можно восстановить даже без локальных записей индекса. Старые команды
+Manifest можно восстановить даже без локальных записей индекса; восстановление возвращает
+и базу, и медиафайлы. Старые команды
 `backup_tracker_database` и `restore_tracker_backup` сохранены как алиасы.
 
 После восстановления базы или медиа на продакшене пересоберите все маленькие

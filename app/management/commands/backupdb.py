@@ -5,7 +5,7 @@ import tempfile
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from app.telegram_backup import TelegramBackupError, upload_backup
+from app.telegram_backup import TelegramBackupError, create_backup_archive, upload_backup
 
 
 class Command(BaseCommand):
@@ -22,8 +22,10 @@ class Command(BaseCommand):
             raise CommandError('Telegram backup channel ID is not configured')
 
         os.makedirs(settings.TELEGRAM_BACKUP_SHARED_DIR, exist_ok=True)
-        fd, path = tempfile.mkstemp(
-            suffix='.dump',
+        fd, db_dump_path = tempfile.mkstemp(suffix='.dump')
+        os.close(fd)
+        fd, archive_path = tempfile.mkstemp(
+            suffix='.zip',
             dir=(
                 settings.TELEGRAM_BACKUP_SHARED_DIR
                 if settings.TELEGRAM_BACKUP_LOCAL_FILE_MODE
@@ -32,7 +34,7 @@ class Command(BaseCommand):
         )
         os.close(fd)
         if settings.TELEGRAM_BACKUP_LOCAL_FILE_MODE:
-            os.chmod(path, 0o644)
+            os.chmod(archive_path, 0o644)
         try:
             database = settings.DATABASES['default']
             dump_environment = {
@@ -48,7 +50,7 @@ class Command(BaseCommand):
                         'pg_dump',
                         '--format=custom',
                         '--file',
-                        path,
+                        db_dump_path,
                         database['NAME'],
                     ],
                     env=dump_environment,
@@ -60,7 +62,11 @@ class Command(BaseCommand):
             if result.returncode:
                 raise CommandError('pg_dump failed: ' + result.stderr[-500:])
             try:
-                backup = upload_backup(path, source_filename='coloring-tracker.dump')
+                create_backup_archive(db_dump_path, settings.MEDIA_ROOT, archive_path)
+                backup = upload_backup(
+                    archive_path,
+                    source_filename='coloring-tracker.backup.zip',
+                )
             except TelegramBackupError as error:
                 raise CommandError(f'Telegram backup failed: {error}') from error
             self.stdout.write(
@@ -71,5 +77,6 @@ class Command(BaseCommand):
                 )
             )
         finally:
-            if os.path.exists(path):
-                os.unlink(path)
+            for path in (db_dump_path, archive_path):
+                if os.path.exists(path):
+                    os.unlink(path)

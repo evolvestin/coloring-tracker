@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,8 +11,10 @@ from app.models import TelegramBackup
 from app.telegram_backup import (
     TelegramBackupError,
     TelegramDocument,
+    create_backup_archive,
     download_backup,
     download_manifest_backup,
+    extract_backup_archive,
     load_manifest,
     upload_backup,
 )
@@ -83,6 +86,32 @@ class TelegramBackupTests(TestCase):
         )
         manifest = self._load_fake_manifest(backup.manifest_file_id)
         self.assertEqual(manifest['parts'][0]['file_id'], 'file-100')
+
+    def test_backup_archive_contains_database_and_media(self):
+        with tempfile.TemporaryDirectory() as workdir:
+            root = Path(workdir)
+            db_dump = root / 'db.dump'
+            media_root = root / 'media'
+            archive_path = root / 'backup.zip'
+            extracted_root = root / 'extracted'
+            db_dump.write_bytes(b'postgres-dump')
+            (media_root / 'covers').mkdir(parents=True)
+            (media_root / 'covers' / 'book.jpg').write_bytes(b'image-bytes')
+
+            create_backup_archive(db_dump, media_root, archive_path)
+
+            with zipfile.ZipFile(archive_path) as archive:
+                self.assertEqual(
+                    sorted(archive.namelist()),
+                    ['db.dump', 'media/covers/book.jpg'],
+                )
+            extracted_db, extracted_media = extract_backup_archive(archive_path, extracted_root)
+
+            self.assertEqual(extracted_db.read_bytes(), b'postgres-dump')
+            self.assertEqual(
+                (extracted_media / 'covers' / 'book.jpg').read_bytes(),
+                b'image-bytes',
+            )
 
     def test_media_groups_do_not_have_single_item_remainder(self):
         source = self._temp_file(b'abcdefghijk')

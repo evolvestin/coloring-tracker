@@ -4,10 +4,12 @@ import math
 import os
 import re
 import shutil
+import stat
 import tempfile
+import zipfile
 from dataclasses import dataclass
 from html import escape
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 from uuid import UUID
 
@@ -41,6 +43,69 @@ def sha256_file(path: str | os.PathLike[str]) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b''):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def create_backup_archive(
+    db_dump_path: str | os.PathLike[str],
+    media_root: str | os.PathLike[str],
+    destination: str | os.PathLike[str],
+) -> None:
+    media_root = Path(media_root)
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(
+        destination,
+        mode='w',
+        compression=zipfile.ZIP_DEFLATED,
+        allowZip64=True,
+    ) as archive:
+        archive.write(db_dump_path, arcname='db.dump')
+        if not media_root.exists():
+            return
+        for file_path in media_root.rglob('*'):
+            if file_path.is_file() and not file_path.is_symlink():
+                archive.write(file_path, arcname=Path('media') / file_path.relative_to(media_root))
+
+
+def extract_backup_archive(
+    archive_path: str | os.PathLike[str],
+    destination: str | os.PathLike[str],
+) -> tuple[Path, Path | None]:
+    destination = Path(destination)
+    destination.mkdir(parents=True, exist_ok=True)
+    db_dump_path = None
+    media_path = None
+    seen_names = set()
+    with zipfile.ZipFile(archive_path, mode='r') as archive:
+        for entry in archive.infolist():
+            relative = PurePosixPath(entry.filename)
+            if (
+                relative.is_absolute()
+                or not relative.parts
+                or '..' in relative.parts
+                or entry.filename in seen_names
+            ):
+                raise TelegramBackupError('Backup archive contains an unsafe or duplicate path')
+            seen_names.add(entry.filename)
+            mode = (entry.external_attr >> 16) & 0o170000
+            if mode == stat.S_IFLNK:
+                raise TelegramBackupError('Backup archive contains a symbolic link')
+            if entry.is_dir():
+                continue
+            if relative == PurePosixPath('db.dump'):
+                target = destination / 'db.dump'
+                db_dump_path = target
+            elif relative.parts[0] == 'media' and len(relative.parts) > 1:
+                target = destination.joinpath(*relative.parts)
+                media_path = destination / 'media'
+            else:
+                raise TelegramBackupError('Backup archive contains an unexpected path')
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(entry, mode='r') as source, target.open('wb') as output:
+                shutil.copyfileobj(source, output, length=1024 * 1024)
+    if db_dump_path is None:
+        raise TelegramBackupError('Backup archive does not contain db.dump')
+    return db_dump_path, media_path
 
 
 class TelegramBotApi:
