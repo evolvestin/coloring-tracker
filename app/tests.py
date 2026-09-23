@@ -258,6 +258,32 @@ class RandomizerTests(TestCase):
         self.assertEqual(RandomizerRun.objects.get().user_book_id, user_book.id)
 
 
+class TrackerStatsTests(TestCase):
+    @override_settings(DEBUG=True)
+    def test_spread_counts_as_one_work_in_tracker_totals(self):
+        user = TrackerUser.objects.create(session_key='stats-user')
+        book = ColoringBook.objects.create(title='Развороты')
+        first = ColoringPage.objects.create(book=book, number=1)
+        spread = ColoringPage.objects.create(book=book, number=2, spread_end=3)
+        ColoringPage.objects.create(book=book, number=4)
+        user_book = UserBook.objects.create(user=user, book=book)
+        ColoringWork.objects.create(user_book=user_book, page=first)
+        ColoringWork.objects.create(user_book=user_book, page=spread)
+
+        with patch('app.views.tracker_identity', return_value=user):
+            collection = self.client.get('/api/tracker/books/?dev=true').json()
+            detail = self.client.get(f'/api/tracker/books/{user_book.id}/?dev=true').json()
+            profile = self.client.get('/api/tracker/profile/?dev=true').json()
+
+        self.assertEqual(collection['books'][0]['total'], 3)
+        self.assertEqual(collection['books'][0]['done'], 2)
+        self.assertEqual(collection['books'][0]['progress'], 67)
+        self.assertEqual(detail['book']['total'], 3)
+        self.assertEqual(len(detail['pages']), 3)
+        self.assertEqual(profile['stats']['total'], 3)
+        self.assertEqual(profile['stats']['completed'], 2)
+
+
 class PersonalBookTests(TestCase):
     @override_settings(DEBUG=True)
     def test_personal_book_is_created_with_pages_and_hidden_from_catalog(self):

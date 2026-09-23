@@ -149,6 +149,11 @@ class ColoringBook(TimestampedModel):
         return sum(p.page_count for p in self.pages.all())
 
     @property
+    def total_works_count(self):
+        """Number of trackable works; a spread is one work."""
+        return self.pages.count()
+
+    @property
     def spreads_count(self):
         return sum(1 for p in self.pages.all() if p.spread_end)
 

@@ -554,7 +554,7 @@ class TrackerUserAdmin(admin.ModelAdmin):
     def _statistics(user):
         if not hasattr(user, '_tracker_admin_statistics'):
             books = list(user.books.all())
-            total = sum(book.book.total_pages_count for book in books)
+            total = sum(book.book.total_works_count for book in books)
             completed = sum(book.works.count() for book in books)
             user._tracker_admin_statistics = {
                 'books': len(books),
@@ -572,7 +572,7 @@ class TrackerUserAdmin(admin.ModelAdmin):
     def stats_completed(self, user):
         return self._statistics(user)['completed']
 
-    @admin.display(description='Страниц всего')
+    @admin.display(description='Работ всего')
     def stats_total(self, user):
         return self._statistics(user)['total']
 
@@ -588,7 +588,7 @@ class TrackerUserAdmin(admin.ModelAdmin):
             '<div class="tracker-user-statistics">'
             '<div><b>{}</b><span>раскрашено</span></div>'
             '<div><b>{}</b><span>{}</span></div>'
-            '<div><b>{}</b><span>страниц всего</span></div>'
+            '<div><b>{}</b><span>работ всего</span></div>'
             '<div><b>{}%</b><span>прогресс</span></div>'
             '</div>',
             stats['completed'],

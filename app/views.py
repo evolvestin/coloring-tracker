@@ -226,7 +226,9 @@ def user_books(request):
 
 
 def book_data(user_book):
-    total = user_book.book.total_pages_count
+    # A spread is represented by one ColoringPage and is one trackable work,
+    # even though it contains two physical pages.
+    total = user_book.book.total_works_count
     completed = user_book.works.count()
     return {
         'id': user_book.id,
@@ -1066,7 +1068,7 @@ def tracker_profile(request):
     books = user_books(request)
     # A spread is one trackable work, even though it contains two physical pages.
     # Keep the profile aggregate consistent with book_data() and the monthly report.
-    total = sum(item.book.pages.count() for item in books)
+    total = sum(item.book.total_works_count for item in books)
     completed = ColoringWork.objects.filter(user_book__in=books).count()
     return JsonResponse(
         {
