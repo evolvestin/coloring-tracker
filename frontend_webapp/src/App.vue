@@ -10,7 +10,7 @@ const hasInitData = !!window.Telegram?.WebApp?.initData
 const isDevBypass = new URLSearchParams(window.location.search).get('dev') === 'true'
 const isTrackerPreview = new URLSearchParams(window.location.search).has('tracker_preview')
 const isTelegram = hasInitData || isDevBypass || isTrackerPreview
-const activeTab = computed(() => route.path === '/catalog' ? 'catalog' : route.path === '/report' ? 'report' : 'tracker')
+const activeTab = computed(() => route.path === '/catalog' ? 'catalog' : route.path === '/report' || route.path === '/markers' ? 'report' : 'tracker')
 
 onMounted(() => {
   if (hasInitData) {

@@ -18,6 +18,7 @@ export default createRouter({
     { path: '/personal/new', component: PersonalBookCreateView },
     { path: '/book/:id', component: BookView, props: true },
     { path: '/report', component: ReportView },
+    { path: '/markers', redirect: { path: '/report', query: { stats: 'markers' } } },
     { path: '/support', component: SupportView },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],

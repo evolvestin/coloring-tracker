@@ -3,6 +3,8 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from app.marker_constants import MARKER_MANUFACTURER_CHOICES, MARKER_TYPES
+
 FLOWER_ICONS = (
     '🌸',
     '🌷',
@@ -94,6 +96,11 @@ class TrackerUser(TimestampedModel):
     username = models.CharField('Username', max_length=255, blank=True)
     display_name = models.CharField('Имя', max_length=255, blank=True)
     photo_url = models.URLField('Аватар', max_length=500, blank=True)
+    marker_palette_import_allowed = models.BooleanField(
+        'Разрешать импорт палитр',
+        default=True,
+        help_text='Другие пользователи смогут импортировать палитры этого пользователя.',
+    )
     webapp_viewport_width = models.PositiveIntegerField('Ширина WebApp', null=True, blank=True)
     webapp_viewport_height = models.PositiveIntegerField('Высота WebApp', null=True, blank=True)
 
@@ -280,6 +287,99 @@ class ColoringColorCode(TimestampedModel):
 
     def __str__(self):
         return f'{self.user_book}: стр. {self.page.label}'
+
+
+class Marker(TimestampedModel):
+    """Shared consumable directory entry, identified by type, maker and number."""
+
+    symbol = models.CharField('Базовый значок', max_length=32, blank=True)
+    number = models.CharField('Номер', max_length=64)
+    manufacturer = models.CharField(
+        'Производитель', max_length=32, choices=MARKER_MANUFACTURER_CHOICES, default='unknown'
+    )
+    marker_type = models.CharField('Тип', max_length=16, choices=MARKER_TYPES, default='marker')
+    created_by = models.ForeignKey(
+        TrackerUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_markers',
+    )
+
+    class Meta:
+        verbose_name = 'Маркер или ручка'
+        verbose_name_plural = 'Маркеры и ручки'
+        ordering = ('manufacturer', 'marker_type', 'number', 'symbol')
+        constraints = [
+            models.UniqueConstraint(
+                fields=('manufacturer', 'marker_type', 'number'),
+                name='unique_marker_type_manufacturer_number',
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.get_manufacturer_display()} {self.symbol} {self.number}'.strip()
+
+
+class MarkerPalette(TimestampedModel):
+    """A user's palette for one drawing; sharing is controlled per palette."""
+
+    user_book = models.ForeignKey(UserBook, on_delete=models.CASCADE, related_name='marker_palettes')
+    page = models.ForeignKey(ColoringPage, on_delete=models.CASCADE, related_name='marker_palettes')
+    allow_import = models.BooleanField('Разрешать импорт этой палитры', default=True)
+    fingerprint = models.CharField('Отпечаток палитры', max_length=64)
+    imported_from = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='imports',
+        verbose_name='Скопирована из',
+    )
+
+    class Meta:
+        verbose_name = 'Палитра маркеров'
+        verbose_name_plural = 'Палитры маркеров'
+        ordering = ('-created_at',)
+        constraints = [
+            models.UniqueConstraint(
+                fields=('user_book', 'page'), name='unique_marker_palette_user_page'
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.user_book}: стр. {self.page.label}'
+
+
+class MarkerPaletteItem(TimestampedModel):
+    """One marker used in a palette. Intensity is optional and intentionally coarse."""
+
+    USAGE_LITTLE = 'little'
+    USAGE_MEDIUM = 'medium'
+    USAGE_MUCH = 'much'
+    USAGE_CHOICES = (
+        (USAGE_LITTLE, 'Немного'),
+        (USAGE_MEDIUM, 'Средне'),
+        (USAGE_MUCH, 'Много'),
+    )
+    palette = models.ForeignKey(MarkerPalette, on_delete=models.CASCADE, related_name='items')
+    marker = models.ForeignKey(Marker, on_delete=models.PROTECT, related_name='palette_items')
+    symbol = models.CharField('Значок в палитре', max_length=32)
+    usage_level = models.CharField(
+        'Сколько ушло', max_length=16, choices=USAGE_CHOICES, blank=True
+    )
+    position = models.PositiveIntegerField('Порядок', default=0)
+
+    class Meta:
+        verbose_name = 'Маркер в палитре'
+        verbose_name_plural = 'Маркеры в палитрах'
+        ordering = ('position', 'pk')
+        constraints = [
+            models.UniqueConstraint(fields=('palette', 'marker'), name='unique_palette_marker')
+        ]
+
+    def __str__(self):
+        return f'{self.palette} — {self.marker}'
 
 
 class ColoringSuggestion(TimestampedModel):

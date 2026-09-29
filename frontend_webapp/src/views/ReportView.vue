@@ -3,6 +3,7 @@ import '../report.css'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import DonationIcon from '../components/DonationIcon.vue'
+import MarkerStatsView from './MarkerStatsView.vue'
 import { useTrackerStore } from '../stores/tracker'
 import { formatCount } from '../pluralize'
 
@@ -11,6 +12,7 @@ const route = useRoute()
 const store = useTrackerStore()
 
 const month = ref(route.query.month || store.report?.month || '')
+const statsSection = ref(route.query.stats === 'markers' ? 'markers' : 'report')
 const monthPickerOpen = ref(false)
 const monthPicker = ref(null)
 const activePhoto = ref(null)
@@ -30,6 +32,13 @@ function selectMonth(value) {
   if (value) month.value = value
   monthPickerOpen.value = false
   load()
+}
+function selectStatsSection(value) {
+  statsSection.value = value
+  const query = { ...route.query }
+  if (value === 'markers') query.stats = 'markers'
+  else delete query.stats
+  router.replace({ query })
 }
 function closeMonthPicker(event) {
   if (monthPicker.value && !monthPicker.value.contains(event.target)) monthPickerOpen.value = false
@@ -116,8 +125,8 @@ onBeforeUnmount(() => {
   <section class="page">
     <header>
       <button class="back" aria-label="Назад" @click="router.back()"><svg viewBox="0 0 24 24" fill="none"><path d="m14.5 5-7 7 7 7"/></svg></button>
-      <div><p class="eyebrow">СТАТИСТИКА</p><h1>Отчёт за месяц</h1></div>
-      <div v-if="report?.months?.length" ref="monthPicker" class="month-picker">
+      <div><p class="eyebrow">СТАТИСТИКА</p><h1>{{ statsSection === 'markers' ? 'Маркеры' : 'Отчёт за месяц' }}</h1></div>
+      <div v-if="statsSection === 'report' && report?.months?.length" ref="monthPicker" class="month-picker">
         <button class="month-picker-trigger" type="button" :aria-expanded="monthPickerOpen" aria-haspopup="listbox" @click="monthPickerOpen = !monthPickerOpen">
           <span>{{ monthLabel(month) }}</span>
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
@@ -127,6 +136,15 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </header>
+
+    <div class="stats-section-tabs" role="tablist" aria-label="Раздел статистики">
+      <button type="button" role="tab" :aria-selected="statsSection === 'report'" :class="{ active: statsSection === 'report' }" @click="selectStatsSection('report')">Работы</button>
+      <button type="button" role="tab" :aria-selected="statsSection === 'markers'" :class="{ active: statsSection === 'markers' }" @click="selectStatsSection('markers')">Маркеры</button>
+    </div>
+
+    <MarkerStatsView v-if="statsSection === 'markers'" embedded />
+
+    <template v-else>
 
     <button class="support-invite" type="button" @click="router.push('/support')"><span class="support-invite-icon"><DonationIcon /></span><span><b>Помочь трекеру расти</b><small>Если вам здесь уютно, можно оставить немного Stars — это необязательно, но очень помогает.</small></span><i>›</i></button>
     <p v-if="loading && !report" class="muted">Загружаем отчёт…</p>
@@ -155,6 +173,7 @@ onBeforeUnmount(() => {
       </section>
     </template>
     <div v-else-if="!loading && report" class="empty compact-empty"><div>❀</div><h2>Пока нет работ</h2><p>Первый отчёт появится после завершённой раскраски.</p></div>
+    </template>
     <transition name="modal"><div v-if="activePhoto" class="report-photo-backdrop" @click.self="closePhoto"><section class="report-photo-viewer" role="dialog" aria-modal="true" aria-label="Просмотр фото"><button class="modal-close" type="button" aria-label="Закрыть просмотр" @click="closePhoto">×</button><p>{{ activePhoto.title }}</p><img :src="activePhoto.src" :alt="activePhoto.title"></section></div></transition>
   </section>
 </template>

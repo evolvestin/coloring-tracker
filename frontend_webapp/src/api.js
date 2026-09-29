@@ -1,11 +1,13 @@
 const telegramInitData = window.Telegram?.WebApp?.initData || ''
 const isDevBypass = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dev') === 'true'
+const devPreviewTelegramId = new URLSearchParams(window.location.search).get('dev_telegram_id')
 const trackerPreviewTelegramId = new URLSearchParams(window.location.search).get('tracker_preview')
 
 export async function api(url, options = {}) {
   const headers = new Headers(options.headers || {})
   if (telegramInitData) headers.set('X-Telegram-Init-Data', telegramInitData)
   if (isDevBypass) headers.set('X-Dev-Mode', 'true')
+  if (devPreviewTelegramId) headers.set('X-Dev-Preview-Telegram-ID', devPreviewTelegramId)
   if (trackerPreviewTelegramId) {
     headers.set('X-Tracker-Preview-Telegram-ID', trackerPreviewTelegramId)
   }

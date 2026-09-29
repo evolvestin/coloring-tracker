@@ -4,6 +4,7 @@ import json
 import math
 import os
 import random
+import re
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, timedelta
@@ -22,6 +23,14 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from PIL import Image, UnidentifiedImageError
 
+from app.marker_constants import (
+    MARKER_MANUFACTURER_CODES,
+    MARKER_MANUFACTURER_LABELS,
+    MARKER_MANUFACTURERS,
+    MARKER_TYPE_CODES,
+    MARKER_TYPE_LABELS,
+    MARKER_TYPES,
+)
 from app.models import (
     FLOWER_ICONS,
     ColoringBook,
@@ -30,6 +39,9 @@ from app.models import (
     ColoringPagePhoto,
     ColoringSuggestion,
     ColoringWork,
+    Marker,
+    MarkerPalette,
+    MarkerPaletteItem,
     RandomizerRun,
     StarDonation,
     TrackerUser,
@@ -45,6 +57,30 @@ SUGGESTION_SOURCE_LIMIT = 100_000
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
 PERSONAL_BOOK_TITLE_LIMIT = 255
 PERSONAL_PAGE_LIMIT = 300
+MARKER_SYMBOL_LIMIT = 32
+MARKER_NUMBER_LIMIT = 64
+MARKER_NUMBER_RE = re.compile(r'^[A-Z0-9 -]+$')
+MARKER_PALETTE_LIMIT = 30
+MARKER_SUGGESTION_LIMIT = 12
+MARKER_USAGE_WEIGHTS = {
+    '': 1,
+    MarkerPaletteItem.USAGE_LITTLE: 1,
+    MarkerPaletteItem.USAGE_MEDIUM: 2,
+    MarkerPaletteItem.USAGE_MUCH: 3,
+}
+MARKER_USAGE_LABELS = {
+    MarkerPaletteItem.USAGE_MUCH: 'Много',
+    MarkerPaletteItem.USAGE_MEDIUM: 'Средне',
+    MarkerPaletteItem.USAGE_LITTLE: 'Немного',
+    '': 'Не указали',
+}
+MARKER_STATS_PERIOD_DAYS = {
+    '1m': 30,
+    '3m': 90,
+    '6m': 180,
+    '1y': 365,
+    'all': None,
+}
 DONATION_TITLE = 'Поддержка трекера'
 DONATION_DESCRIPTION = 'Спасибо, что помогаете развивать трекер раскрасок.'
 DONATION_PRESETS = (10, 50, 100, 250)
@@ -185,6 +221,12 @@ def tracker_identity(request):
         return TrackerUser.objects.filter(telegram_id=preview_telegram_id).first()
 
     dev_mode = settings.DEBUG or os.getenv('VITE_DEV_MODE', 'False').lower() == 'true'
+    dev_preview_id = request.headers.get('X-Dev-Preview-Telegram-ID') or request.GET.get('dev_telegram_id')
+    if dev_mode and request.headers.get('X-Dev-Mode') == 'true' and dev_preview_id:
+        try:
+            return TrackerUser.objects.filter(telegram_id=int(dev_preview_id)).first()
+        except (TypeError, ValueError):
+            return None
     if dev_mode and (
         request.GET.get('dev') == 'true' or request.headers.get('X-Dev-Mode') == 'true'
     ):
@@ -329,7 +371,7 @@ def tracker_randomizer(request):
         try:
             scope_user_book_id = int(raw_scope)
         except ValueError:
-            return JsonResponse({'error': 'Некорректная книга для рандомизации.'}, status=400)
+            return JsonResponse({'error': 'Некорректная раскраска для рандомизации.'}, status=400)
     else:
         scope_user_book_id = None
 
@@ -338,7 +380,7 @@ def tracker_randomizer(request):
             scope_user_book_id is not None
             and not UserBook.objects.filter(pk=scope_user_book_id, user=user).exists()
         ):
-            return JsonResponse({'error': 'Книга не найдена.'}, status=404)
+            return JsonResponse({'error': 'Раскраска не найдена.'}, status=404)
         return JsonResponse(randomizer_status(request, user=user))
 
     with transaction.atomic():
@@ -1224,6 +1266,413 @@ def tracker_color_code(request, user_book_id, page_id):
             ),
         }
     )
+
+
+def marker_data(marker):
+    return {
+        'id': marker.id,
+        'symbol': marker.symbol,
+        'number': marker.number,
+        'manufacturer': marker.manufacturer,
+        'manufacturer_label': MARKER_MANUFACTURER_LABELS.get(marker.manufacturer, 'Не указан'),
+        'marker_type': marker.marker_type,
+        'marker_type_label': MARKER_TYPE_LABELS.get(marker.marker_type, 'Маркер'),
+    }
+
+
+def normalize_marker_number(raw_number):
+    if not isinstance(raw_number, str):
+        raise ValueError('Укажите номер расходника.')
+    number = raw_number.strip().upper()
+    if not number or len(number) > MARKER_NUMBER_LIMIT or not MARKER_NUMBER_RE.fullmatch(number):
+        raise ValueError('Номер: только английские буквы, цифры, пробелы и дефисы.')
+    return number
+
+
+def palette_fingerprint(items):
+    normalized = sorted(
+        f"{item['marker_id']}:{item.get('symbol', '')}:{item.get('usage_level', '')}" for item in items
+    )
+    return hashlib.sha256('|'.join(normalized).encode()).hexdigest()
+
+
+def palette_payload(request, palette):
+    items = list(palette.items.select_related('marker').all())
+    return {
+        'id': palette.id,
+        'fingerprint': palette.fingerprint,
+        'allow_import': palette.user_book.user.marker_palette_import_allowed,
+        'items': [
+            {
+                'id': item.id,
+                'marker': {**marker_data(item.marker), 'symbol': item.symbol},
+                'usage_level': item.usage_level,
+            }
+            for item in items
+        ],
+    }
+
+
+def shared_palette_payload(palette, popularity):
+    return {
+        'id': palette.id,
+        'fingerprint': palette.fingerprint,
+        'popularity': popularity,
+        'items': [
+            {
+                'marker': marker_data(item.marker),
+                'symbol': item.symbol,
+                'usage_level': item.usage_level,
+            }
+            for item in palette.items.select_related('marker').all()
+        ],
+    }
+
+
+def palette_scope(request, user_book_id, page_id):
+    user_book = get_object_or_404(user_books(request), pk=user_book_id)
+    page = get_object_or_404(ColoringPage, pk=page_id, book=user_book.book)
+    return user_book, page
+
+
+@require_http_methods(['GET'])
+def tracker_markers(request):
+    query = request.GET.get('q', '').strip()[:MARKER_NUMBER_LIMIT]
+    markers = Marker.objects.all()
+    if query:
+        markers = markers.filter(
+            Q(symbol__icontains=query)
+            | Q(number__icontains=query)
+            | Q(manufacturer__icontains=query)
+            | Q(palette_items__symbol__icontains=query)
+        ).distinct()
+    return JsonResponse({
+        'markers': [marker_data(marker) for marker in markers[:MARKER_SUGGESTION_LIMIT]],
+        'manufacturers': [
+            {'value': value, 'label': label} for value, label in MARKER_MANUFACTURERS
+        ],
+        'marker_types': [{'value': value, 'label': label} for value, label in MARKER_TYPES],
+    })
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'PUT'])
+def tracker_palette(request, user_book_id, page_id):
+    user_book, page = palette_scope(request, user_book_id, page_id)
+    own = MarkerPalette.objects.filter(user_book=user_book, page=page).first()
+    if request.method == 'GET':
+        candidates = (
+            MarkerPalette.objects.filter(
+                page=page,
+                allow_import=True,
+                user_book__user__marker_palette_import_allowed=True,
+            )
+            .exclude(user_book__user=user_book.user)
+            .prefetch_related('items__marker', 'imports')
+        )
+        grouped = {}
+        for candidate in candidates:
+            popularity = 1 + candidate.imports.count()
+            current = grouped.get(candidate.fingerprint)
+            if current is None or popularity > current[0]:
+                grouped[candidate.fingerprint] = (popularity, candidate)
+            else:
+                grouped[candidate.fingerprint] = (current[0] + popularity, current[1])
+        shared = [
+            shared_palette_payload(candidate, popularity)
+            for popularity, candidate in sorted(
+                grouped.values(), key=lambda pair: (-pair[0], pair[1].created_at)
+            )[:8]
+        ]
+        return JsonResponse(
+            {
+                'palette': palette_payload(request, own) if own else None,
+                'shared': shared,
+                'limit': MARKER_PALETTE_LIMIT,
+                'import_allowed': user_book.user.marker_palette_import_allowed,
+                'manufacturers': [
+                    {'value': value, 'label': label} for value, label in MARKER_MANUFACTURERS
+                ],
+                'marker_types': [{'value': value, 'label': label} for value, label in MARKER_TYPES],
+            }
+        )
+
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Ожидается JSON.'}, status=400)
+    raw_items = payload.get('items', [])
+    if not isinstance(raw_items, list) or len(raw_items) > MARKER_PALETTE_LIMIT:
+        return JsonResponse({'error': f'В палитре может быть не больше {MARKER_PALETTE_LIMIT} позиций.'}, status=400)
+    items, seen = [], set()
+    try:
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                raise ValueError('Проверьте строки палитры.')
+            marker_id = raw.get('marker_id')
+            if marker_id:
+                marker = Marker.objects.get(pk=int(marker_id))
+                symbol = str(raw.get('symbol', '')).strip() or marker.symbol
+                manufacturer = str(raw.get('manufacturer', '')).strip() or marker.manufacturer
+                marker_type = str(raw.get('marker_type', '')).strip() or marker.marker_type
+                if manufacturer != marker.manufacturer:
+                    raise ValueError('Выберите производителя для этой позиции заново.')
+                if marker_type != marker.marker_type:
+                    raise ValueError('Выберите тип для этой позиции заново.')
+            else:
+                symbol = str(raw.get('symbol', '')).strip()
+                number = normalize_marker_number(raw.get('number', ''))
+                manufacturer = str(raw.get('manufacturer', '')).strip() or 'unknown'
+                marker_type = str(raw.get('marker_type', '')).strip()
+                if not symbol or not number:
+                    raise ValueError('Для каждой позиции укажите производителя, тип, значок и номер.')
+                if manufacturer not in MARKER_MANUFACTURER_CODES:
+                    raise ValueError('Выберите производителя из списка.')
+                if marker_type not in MARKER_TYPE_CODES:
+                    raise ValueError('Выберите тип: маркер или ручка.')
+                if len(symbol) > MARKER_SYMBOL_LIMIT or len(number) > MARKER_NUMBER_LIMIT:
+                    raise ValueError('Значок или номер расходника слишком длинный.')
+                marker, created = Marker.objects.get_or_create(
+                    manufacturer=manufacturer,
+                    marker_type=marker_type,
+                    number=number,
+                    defaults={'symbol': symbol, 'created_by': user_book.user},
+                )
+                if not marker.symbol:
+                    marker.symbol = symbol
+                    marker.save(update_fields=('symbol', 'updated_at'))
+            usage_level = str(raw.get('usage_level', '') or '')
+            if usage_level not in MARKER_USAGE_WEIGHTS:
+                raise ValueError('Неизвестная оценка расхода позиции.')
+            if marker.id in seen:
+                raise ValueError('Одну позицию нельзя добавить дважды.')
+            seen.add(marker.id)
+            if not symbol or len(symbol) > MARKER_SYMBOL_LIMIT:
+                raise ValueError('Укажите значок не длиннее 32 символов.')
+            items.append({'marker_id': marker.id, 'symbol': symbol, 'usage_level': usage_level})
+    except (Marker.DoesNotExist, TypeError, ValueError) as exc:
+        return JsonResponse({'error': str(exc) or 'Не удалось распознать позицию.'}, status=400)
+
+    with transaction.atomic():
+        palette, _ = MarkerPalette.objects.select_for_update().get_or_create(
+            user_book=user_book,
+            page=page,
+            defaults={
+                'allow_import': user_book.user.marker_palette_import_allowed,
+                'fingerprint': palette_fingerprint(items),
+            },
+        )
+        palette.allow_import = user_book.user.marker_palette_import_allowed
+        palette.fingerprint = palette_fingerprint(items)
+        palette.imported_from = None
+        palette.save(update_fields=('allow_import', 'fingerprint', 'imported_from', 'updated_at'))
+        palette.items.all().delete()
+        MarkerPaletteItem.objects.bulk_create(
+            [MarkerPaletteItem(palette=palette, position=index, **item) for index, item in enumerate(items)]
+        )
+    return JsonResponse({'palette': palette_payload(request, palette)})
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def tracker_palette_import(request, user_book_id, page_id):
+    user_book, page = palette_scope(request, user_book_id, page_id)
+    try:
+        payload = json.loads(request.body or '{}')
+        source_id = int(payload.get('palette_id'))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return JsonResponse({'error': 'Выберите палитру для импорта.'}, status=400)
+    source = get_object_or_404(
+        MarkerPalette.objects.prefetch_related('items__marker'),
+        pk=source_id,
+        page=page,
+        allow_import=True,
+        user_book__user__marker_palette_import_allowed=True,
+    )
+    if source.user_book.user_id == user_book.user_id:
+        return JsonResponse({'error': 'Эта палитра уже принадлежит вам.'}, status=400)
+    items = [
+        {'marker_id': item.marker_id, 'symbol': item.symbol, 'usage_level': item.usage_level}
+        for item in source.items.all()
+    ]
+    with transaction.atomic():
+        palette, _ = MarkerPalette.objects.select_for_update().get_or_create(
+            user_book=user_book,
+            page=page,
+            defaults={
+                'allow_import': user_book.user.marker_palette_import_allowed,
+                'fingerprint': source.fingerprint,
+                'imported_from': source,
+            },
+        )
+        palette.allow_import = user_book.user.marker_palette_import_allowed
+        palette.fingerprint = source.fingerprint
+        palette.imported_from = source
+        palette.save(update_fields=('allow_import', 'fingerprint', 'imported_from', 'updated_at'))
+        palette.items.all().delete()
+        MarkerPaletteItem.objects.bulk_create(
+            [MarkerPaletteItem(palette=palette, position=index, **item) for index, item in enumerate(items)]
+        )
+    return JsonResponse({'palette': palette_payload(request, palette)})
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'PATCH'])
+def tracker_marker_settings(request):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    if request.method == 'GET':
+        return JsonResponse({'import_allowed': user.marker_palette_import_allowed})
+    try:
+        payload = json.loads(request.body or '{}')
+        allowed = payload['import_allowed']
+    except (json.JSONDecodeError, KeyError):
+        return JsonResponse({'error': 'Ожидается настройка импорта.'}, status=400)
+    if not isinstance(allowed, bool):
+        return JsonResponse({'error': 'Настройка импорта должна быть логической.'}, status=400)
+    user.marker_palette_import_allowed = allowed
+    user.save(update_fields=('marker_palette_import_allowed', 'updated_at'))
+    return JsonResponse({'import_allowed': allowed})
+
+
+def marker_stats_payload(user, period='6m', top_limit=10, top_offset=0):
+    period_days = MARKER_STATS_PERIOD_DAYS.get(period, MARKER_STATS_PERIOD_DAYS['6m'])
+    period_start = timezone.now() - timedelta(days=period_days) if period_days else None
+
+    def in_period(items):
+        if period_start is None:
+            return items
+        return [item for item in items if item.palette.created_at >= period_start]
+
+    personal_items = in_period(list(
+        MarkerPaletteItem.objects.filter(palette__user_book__user=user)
+        .select_related('marker', 'palette__user_book__book')
+    ))
+    def aggregate(items):
+        result = {}
+        for item in items:
+            key = item.marker_id
+            row = result.setdefault(
+                key,
+                {
+                    'marker': marker_data(item.marker),
+                    'uses': 0,
+                    'weighted': 0,
+                    'books': set(),
+                    'palettes': set(),
+                    'symbols': {},
+                    'usage_levels': {key: 0 for key in MARKER_USAGE_LABELS},
+                },
+            )
+            row['uses'] += 1
+            row['weighted'] += MARKER_USAGE_WEIGHTS.get(item.usage_level, 1)
+            row['books'].add(item.palette.user_book.book_id)
+            row['palettes'].add(item.palette_id)
+            row['symbols'][item.symbol] = row['symbols'].get(item.symbol, 0) + 1
+            row['usage_levels'][item.usage_level] = row['usage_levels'].get(item.usage_level, 0) + 1
+        rows = []
+        for row in result.values():
+            symbol = max(row['symbols'], key=row['symbols'].get) if row['symbols'] else row['marker']['symbol']
+            rows.append({
+                'marker': {**row['marker'], 'symbol': symbol},
+                'uses': row['uses'],
+                'weighted': row['weighted'],
+                'books': len(row['books']),
+                'palettes': len(row['palettes']),
+                'usage_summary': [
+                    {'key': key, 'label': MARKER_USAGE_LABELS[key], 'count': count}
+                    for key, count in row['usage_levels'].items()
+                    if count
+                ],
+            })
+        return sorted(rows, key=lambda row: (-row['uses'], -row['weighted'], row['marker']['number']))
+
+    def trend(items):
+        today = timezone.localdate()
+        month_keys = []
+        year, month = today.year, today.month
+        for _ in range(6):
+            month_keys.append(f'{year:04d}-{month:02d}')
+            month -= 1
+            if month == 0:
+                year, month = year - 1, 12
+        counts = {key: 0 for key in reversed(month_keys)}
+        for item in items:
+            key = item.palette.created_at.strftime('%Y-%m')
+            if key in counts:
+                counts[key] += 1
+        return [{'month': key, 'value': value} for key, value in counts.items()]
+
+    personal_top_all = aggregate(personal_items)
+    personal_top = personal_top_all[top_offset:top_offset + top_limit]
+    global_items = in_period(list(MarkerPaletteItem.objects.all().select_related('marker', 'palette__user_book')))
+    global_top_all = aggregate(global_items)
+    global_top = global_top_all[top_offset:top_offset + top_limit]
+    user_totals = {}
+    for item in global_items:
+        user_id = item.palette.user_book.user_id
+        user_totals[user_id] = user_totals.get(user_id, 0) + 1
+    global_weighted_units = sum(
+        MARKER_USAGE_WEIGHTS.get(item.usage_level, 1) for item in global_items
+    )
+    personal_weighted_units = sum(
+        MARKER_USAGE_WEIGHTS.get(item.usage_level, 1) for item in personal_items
+    )
+    ranked_users = sorted(user_totals.values(), reverse=True)
+    my_rank = ranked_users.index(user_totals[user.pk]) + 1 if user.pk in user_totals else None
+    return {
+        'personal': {
+            'total_entries': len(personal_items),
+            'weighted_units': sum(MARKER_USAGE_WEIGHTS.get(item.usage_level, 1) for item in personal_items),
+            'distinct_markers': len({item.marker_id for item in personal_items}),
+            'palettes': len({item.palette_id for item in personal_items}),
+            'top': personal_top,
+            'top_offset': top_offset,
+            'top_total': len(personal_top_all),
+            'top_has_more': top_offset + len(personal_top) < len(personal_top_all),
+            'trend': trend(personal_items),
+        },
+        'global': {
+            'users': len(user_totals),
+            'total_entries': len(global_items),
+            'weighted_units': global_weighted_units,
+            'distinct_markers': len({item.marker_id for item in global_items}),
+            'palettes': len({item.palette_id for item in global_items}),
+            'my_weighted_units': personal_weighted_units,
+            'my_share_percent': round(len(personal_items) * 100 / len(global_items), 1)
+            if global_items
+            else 0,
+            'my_rank': my_rank,
+            'top': global_top,
+            'top_offset': top_offset,
+            'top_total': len(global_top_all),
+            'top_has_more': top_offset + len(global_top) < len(global_top_all),
+            'trend': trend(global_items),
+            'leaderboard': [
+                {'rank': index, 'entries': value}
+                for index, value in enumerate(sorted(user_totals.values(), reverse=True)[:5], 1)
+            ],
+        },
+        'period': period if period in MARKER_STATS_PERIOD_DAYS else '6m',
+    }
+
+
+@require_http_methods(['GET'])
+def tracker_marker_stats(request):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    period = request.GET.get('period', '6m')
+    try:
+        top_limit = min(max(int(request.GET.get('limit', 10)), 1), 30)
+        top_offset = max(int(request.GET.get('offset', 0)), 0)
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'Некорректные параметры статистики.'}, status=400)
+    return JsonResponse({
+        'stats': marker_stats_payload(user, period=period, top_limit=top_limit, top_offset=top_offset),
+        'usage_weights': MARKER_USAGE_WEIGHTS,
+    })
 
 
 @require_http_methods(['GET'])

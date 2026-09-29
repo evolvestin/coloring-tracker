@@ -16,6 +16,9 @@ from app.models import (
     ColoringPage,
     ColoringSuggestion,
     ColoringWork,
+    Marker,
+    MarkerPalette,
+    MarkerPaletteItem,
     RandomizerRun,
     StarDonation,
     TrackerUser,
@@ -282,6 +285,128 @@ class TrackerStatsTests(TestCase):
         self.assertEqual(len(detail['pages']), 3)
         self.assertEqual(profile['stats']['total'], 3)
         self.assertEqual(profile['stats']['completed'], 2)
+
+
+class MarkerPaletteTests(TestCase):
+    @override_settings(DEBUG=True)
+    def test_marker_number_can_repeat_for_different_manufacturers(self):
+        Marker.objects.create(number='599', symbol='✦', manufacturer='flysea')
+        Marker.objects.create(number='599', symbol='✦', manufacturer='guangna')
+        Marker.objects.create(number='599', symbol='✦', manufacturer='flysea', marker_type='pen')
+
+        response = self.client.get('/api/tracker/markers/?q=599&dev=true')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            {(marker['manufacturer'], marker['number']) for marker in response.json()['markers']},
+            {('flysea', '599'), ('guangna', '599')},
+        )
+        self.assertEqual(
+            {(marker['manufacturer'], marker['marker_type'], marker['number']) for marker in response.json()['markers']},
+            {('flysea', 'marker', '599'), ('flysea', 'pen', '599'), ('guangna', 'marker', '599')},
+        )
+        self.assertEqual(
+            [manufacturer['value'] for manufacturer in response.json()['manufacturers']],
+            [
+                'flysea',
+                'guangna',
+                'grasp',
+                'infiart',
+                'languo',
+                'rosymeng',
+                'nusoulra',
+                'tooli_art',
+                'nicety',
+                'posca',
+            ],
+        )
+        self.assertEqual(
+            response.json()['marker_types'],
+            [{'value': 'marker', 'label': 'Маркер'}, {'value': 'pen', 'label': 'Ручка'}],
+        )
+
+    @override_settings(DEBUG=True)
+    def test_palette_keeps_symbol_per_palette_and_imports_anonymously(self):
+        owner = TrackerUser.objects.create(session_key='marker-owner')
+        guest = TrackerUser.objects.create(session_key='marker-guest')
+        book = ColoringBook.objects.create(title='Палитра')
+        page = ColoringPage.objects.create(book=book, number=1)
+        owner_book = UserBook.objects.create(user=owner, book=book)
+        guest_book = UserBook.objects.create(user=guest, book=book)
+        marker = Marker.objects.create(number='599', symbol='✦', created_by=owner)
+        source = MarkerPalette.objects.create(
+            user_book=owner_book,
+            page=page,
+            fingerprint='source',
+        )
+        MarkerPaletteItem.objects.create(
+            palette=source,
+            marker=marker,
+            symbol='❀',
+            usage_level='medium',
+        )
+
+        with patch('app.views.tracker_identity', return_value=guest):
+            shared = self.client.get(f'/api/tracker/books/{guest_book.id}/pages/{page.id}/palette/?dev=true')
+        self.assertEqual(shared.status_code, 200)
+        self.assertEqual(shared.json()['shared'][0]['items'][0]['symbol'], '❀')
+        source_id = shared.json()['shared'][0]['id']
+
+        with patch('app.views.tracker_identity', return_value=guest):
+            imported = self.client.post(
+                f'/api/tracker/books/{guest_book.id}/pages/{page.id}/palette/import/?dev=true',
+                {'palette_id': source_id},
+                content_type='application/json',
+            )
+        self.assertEqual(imported.status_code, 200)
+        imported_item = MarkerPaletteItem.objects.get(palette__user_book=guest_book)
+        self.assertEqual(imported_item.symbol, '❀')
+        self.assertEqual(imported_item.marker_id, marker.id)
+        self.assertEqual(imported_item.palette.imported_from_id, source.id)
+
+    @override_settings(DEBUG=True)
+    def test_palette_save_creates_shared_marker_from_number_and_stats_are_anonymous(self):
+        user = TrackerUser.objects.create(session_key='marker-stats')
+        book = ColoringBook.objects.create(title='Статистика маркеров')
+        page = ColoringPage.objects.create(book=book, number=1)
+        user_book = UserBook.objects.create(user=user, book=book)
+        with patch('app.views.tracker_identity', return_value=user):
+            saved = self.client.put(
+                f'/api/tracker/books/{user_book.id}/pages/{page.id}/palette/?dev=true',
+                {
+                    'items': [
+                        {'symbol': '☾', 'number': '599', 'manufacturer': 'flysea', 'marker_type': 'marker', 'usage_level': 'much'},
+                        {'symbol': '◇', 'number': 'y34-a 2', 'manufacturer': 'flysea', 'marker_type': 'pen', 'usage_level': ''},
+                    ]
+                },
+                content_type='application/json',
+            )
+            stats = self.client.get('/api/tracker/marker-stats/?dev=true')
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(Marker.objects.filter(number='599').count(), 1)
+        self.assertTrue(Marker.objects.filter(number='Y34-A 2', manufacturer='flysea', marker_type='pen').exists())
+        self.assertEqual(stats.status_code, 200)
+        self.assertEqual(stats.json()['stats']['personal']['weighted_units'], 4)
+        self.assertNotIn('username', stats.json()['stats']['global']['leaderboard'][0])
+
+    @override_settings(DEBUG=True)
+    def test_palette_rejects_invalid_marker_number(self):
+        user = TrackerUser.objects.create(session_key='marker-validation')
+        book = ColoringBook.objects.create(title='Проверка номера')
+        page = ColoringPage.objects.create(book=book, number=1)
+        user_book = UserBook.objects.create(user=user, book=book)
+        with patch('app.views.tracker_identity', return_value=user):
+            response = self.client.put(
+                f'/api/tracker/books/{user_book.id}/pages/{page.id}/palette/?dev=true',
+                {
+                    'items': [
+                        {'symbol': '✦', 'number': '599/blue', 'manufacturer': 'flysea', 'marker_type': 'marker'},
+                    ]
+                },
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('английские буквы', response.json()['error'])
 
 
 class PersonalBookTests(TestCase):

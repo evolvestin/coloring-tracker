@@ -34,6 +34,17 @@ urlpatterns = [
         'api/tracker/books/<int:user_book_id>/pages/<int:page_id>/color-code/',
         views.tracker_color_code,
     ),
+    path('api/tracker/markers/', views.tracker_markers),
+    path(
+        'api/tracker/books/<int:user_book_id>/pages/<int:page_id>/palette/',
+        views.tracker_palette,
+    ),
+    path(
+        'api/tracker/books/<int:user_book_id>/pages/<int:page_id>/palette/import/',
+        views.tracker_palette_import,
+    ),
+    path('api/tracker/marker-settings/', views.tracker_marker_settings),
+    path('api/tracker/marker-stats/', views.tracker_marker_stats),
     path('api/tracker/report/', views.tracker_month_report),
     path(
         'tracker-preview-app/<int:telegram_id>/',

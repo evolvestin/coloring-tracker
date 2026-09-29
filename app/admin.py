@@ -17,6 +17,9 @@ from app.models import (
     ColoringPagePhoto,
     ColoringSuggestion,
     ColoringWork,
+    Marker,
+    MarkerPalette,
+    MarkerPaletteItem,
     RandomizerRun,
     StarDonation,
     TelegramBackup,
@@ -352,6 +355,39 @@ class ColoringColorCodeAdmin(admin.ModelAdmin):
     list_display = ('user_book', 'page', 'created_at')
     list_filter = ('user_book__book',)
     fields = ('user_book', 'page', 'image')
+
+
+@admin.register(Marker)
+class MarkerAdmin(admin.ModelAdmin):
+    list_display = ('marker_type', 'manufacturer', 'symbol', 'number', 'created_by', 'created_at')
+    search_fields = ('manufacturer', 'symbol', 'number')
+    list_filter = ('marker_type', 'created_at')
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(MarkerPalette)
+class MarkerPaletteAdmin(admin.ModelAdmin):
+    list_display = ('user_book', 'page', 'item_count', 'allow_import', 'created_at')
+    list_filter = ('allow_import', 'created_at')
+    search_fields = ('user_book__user__username', 'user_book__book__title', 'page__number')
+    readonly_fields = ('fingerprint', 'created_at', 'updated_at')
+
+    @admin.display(description='Маркеров')
+    def item_count(self, palette):
+        return palette.items.count()
+
+
+@admin.register(MarkerPaletteItem)
+class MarkerPaletteItemAdmin(admin.ModelAdmin):
+    list_display = ('palette', 'marker', 'usage_level', 'position')
+    list_filter = ('usage_level',)
+    search_fields = (
+        'marker__manufacturer',
+        'marker__marker_type',
+        'marker__symbol',
+        'marker__number',
+        'palette__user_book__book__title',
+    )
 
 
 @admin.register(ColoringSuggestion)
