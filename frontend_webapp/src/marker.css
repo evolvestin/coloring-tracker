@@ -12,6 +12,9 @@ html .marker-stats-page{padding-bottom:30px}.marker-stat-tabs{display:grid;grid-
 /* Номер маркера не привязан к одному значку: один номер может встречаться с разными значками. */
 html .marker-ranking-row{grid-template-columns:18px minmax(0,1fr) 22px}
 html .marker-ranking-symbol{display:none}
+html .marker-ranking-copy>div:first-child{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:2px}
+html .marker-stats-page .marker-ranking-copy b{display:block;min-width:0;line-height:1.3;overflow-wrap:anywhere}
+html .marker-stats-page .marker-ranking-copy small{display:block;min-width:0;overflow:visible;text-overflow:clip;white-space:normal;line-height:1.3;overflow-wrap:anywhere}
 html .marker-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 html .marker-usage-copy{display:block;margin-top:2px;color:#c36b88;font-size:8px;line-height:1.2}
 html .marker-kpi-grid{grid-template-columns:minmax(0,1fr)}
@@ -30,3 +33,138 @@ html .stats-section-tabs button{min-height:35px;border:0;border-radius:10px;back
 html .stats-section-tabs button.active{background:#fffafd;color:#d05e88;box-shadow:0 4px 10px #c96a8616}
 html .marker-stats-page.marker-stats-page{padding:0 0 30px;min-height:0}
 html .marker-stats-page.marker-stats-page .marker-stat-tabs{margin-top:0}
+
+/* Make the saved palette a compact summary; editing rows live in their own scroll area. */
+html .own-palette-summary{margin:12px 0;padding:10px;border:1px solid #f0dce3;border-radius:14px;background:#fff}
+html .own-palette-summary-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;color:#674351;font-size:13px}
+html .own-palette-summary-head small{margin-left:5px;color:#ad8996;font-size:11px;font-weight:600}
+html .palette-edit-action,html .palette-cancel-action{min-height:36px;padding:7px 12px;border:1px solid #efc7d5;border-radius:11px;background:#fff0f5;color:#c85e86;font-size:13px;font-weight:800;cursor:pointer}
+html .own-palette-chips{display:flex;flex-wrap:wrap;gap:5px;max-height:100px;overflow:auto}
+html .own-palette-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid #f1dce3;border-radius:9px;background:#fffafd;color:#704857;font-size:12px;font-weight:700}
+html .own-palette-chip b{color:#d4698e;font-size:15px}
+html .palette-form-actions{display:flex;flex:none;gap:6px}
+html .palette-form-actions button{min-height:38px;font-size:13px}
+html .marker-rows-scroll{max-height:min(36vh,330px);overflow:auto;overscroll-behavior:contain;padding:0 4px 0 0;scrollbar-color:#e6b6c6 #fff2f6;scrollbar-width:thin}
+html .marker-rows-scroll .marker-row{margin:5px 0;padding:8px 6px 8px 4px;gap:7px}
+html .marker-rows-scroll .marker-field{gap:4px;font-size:11px}
+html .marker-rows-scroll .marker-field input,html .marker-rows-scroll .marker-field select{min-height:38px;padding:7px 6px;font-size:13px}
+html .marker-rows-scroll .marker-row-index{font-size:12px}
+html .marker-rows-scroll .remove-marker-button{width:28px;height:32px;font-size:24px}
+html .palette-tip{font-size:12px}
+html .palette-save{min-height:46px;font-size:14px}
+
+/* Personal inventory is separate from palettes and their usage analytics. */
+html .marker-view-tabs{grid-template-columns:1fr 1fr;margin:0 0 13px}
+html .marker-view-tabs button,html .marker-audience-tabs button{min-height:44px;font-size:14px}
+html .marker-audience-tabs{margin:0 0 15px}
+html .marker-stock-view{padding:14px;border:1px solid #f2d8e1;border-radius:20px;background:#fffdfd}
+html .marker-stock-heading{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:12px}
+html .marker-stock-heading h2{margin:0;color:#623d4c;font-size:19px}
+html .marker-stock-heading p{margin:4px 0 0;color:#987585;font-size:13px;line-height:1.35}
+html .marker-stock-heading .add-marker-button{min-height:42px;padding:8px 12px;font-size:14px}
+html .marker-stock-summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+html .marker-stock-summary article{padding:11px 12px;border:1px solid #f3dbe4;border-radius:14px;background:linear-gradient(145deg,#fff,#fff3f7)}
+html .marker-stock-summary span,html .marker-stock-summary small{display:block;color:#a17f8c;font-size:12px}
+html .marker-stock-summary b{display:block;margin:3px 0;color:#cb6088;font-size:24px;line-height:1.1}
+html .marker-stock-list{display:grid;gap:8px}
+html .marker-stock-row{position:relative;padding:11px;border:1px solid #f0dce3;border-radius:14px;background:#fff}
+html .marker-stock-fields{display:grid;grid-template-columns:42px minmax(0,1fr) minmax(0,1.1fr) 92px;align-items:end;gap:8px;padding-right:24px}
+html .marker-stock-field{display:grid;gap:4px;min-width:0;color:#997586;font-size:12px;font-weight:800}
+html .marker-stock-field input,html .marker-stock-field select{width:100%;min-width:0;min-height:42px;padding:8px;border:1px solid #ecd8e1;border-radius:10px;background:#fffafd;color:#5f3a49;font-size:14px;font-weight:700}
+html .marker-stock-field input::placeholder{color:#cbb0bb}
+html .marker-stock-symbol{align-self:center;color:#d4698e;font-size:22px;text-align:center}
+html .marker-stock-brand{grid-column:2 / span 2;padding:0 2px 5px;color:#896775;font-size:12px}
+html .marker-stock-quantity input{text-align:center}
+html .marker-stock-row .remove-marker-button{position:absolute;right:5px;top:8px;width:30px;height:34px;font-size:23px}
+html .marker-stock-view .palette-empty{margin:8px 0;padding:16px;font-size:13px}
+html .marker-stock-view .palette-save{margin-top:12px}
+@media(max-width:430px){html .marker-stock-view{padding:11px}html .marker-stock-fields{grid-template-columns:36px minmax(0,1fr) 78px;gap:6px;padding-right:21px}html .marker-stock-fields .marker-stock-field:nth-child(3){grid-column:2 / span 2}html .marker-stock-fields .marker-stock-field:nth-child(4){grid-column:2}html .marker-stock-fields .marker-stock-quantity{grid-column:3}html .marker-stock-brand{grid-column:2!important}html .marker-stock-field{font-size:11px}html .marker-stock-field input,html .marker-stock-field select{min-height:42px;padding:7px;font-size:14px}}
+@media(max-width:430px){
+  html .marker-stock-heading{align-items:stretch;flex-direction:column;gap:9px}
+  html .marker-stock-heading .add-marker-button{width:100%;white-space:nowrap}
+  html .marker-stock-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding-right:22px}
+  html .marker-stock-row--new .marker-stock-fields>.marker-stock-field:nth-child(1){grid-column:1;grid-row:1}
+  html .marker-stock-row--new .marker-stock-fields>.marker-stock-field:nth-child(2){grid-column:2;grid-row:1}
+  html .marker-stock-row--new .marker-stock-fields>.marker-stock-field:nth-child(3){grid-column:1 / -1;grid-row:2}
+  html .marker-stock-row--new .marker-stock-fields>.marker-stock-field:nth-child(4){grid-column:1;grid-row:3}
+  html .marker-stock-row--new .marker-stock-quantity{grid-column:2;grid-row:3}
+  html .marker-stock-row--saved .marker-stock-fields>.marker-stock-symbol{grid-column:1;grid-row:1}
+  html .marker-stock-row--saved .marker-stock-fields>.marker-stock-field:nth-child(2){grid-column:2;grid-row:1}
+  html .marker-stock-row--saved .marker-stock-brand{grid-column:1 / -1!important;grid-row:2;padding-top:2px}
+  html .marker-stock-row--saved .marker-stock-quantity{grid-column:1 / -1;grid-row:3}
+}
+
+/* Shared mobile readability pass for every in-app modal. */
+html .modal-backdrop{place-items:center;padding:12px}
+html .page-modal,html .personal-modal,html .suggestion-modal,html .image-editor-modal,html .randomizer-modal,html .support-test-modal,html .confirm-card{max-height:calc(100dvh - 24px);overflow:auto;padding:20px;border-radius:22px}
+html .page-modal h2,html .personal-modal h2,html .suggestion-modal h2,html .confirm-card h2,html .support-test-modal h2{font-size:21px;line-height:1.2}
+html .modal-hint,html .suggestion-instruction,html .confirm-card p,html .support-test-modal>p:not(.eyebrow){font-size:15px;line-height:1.5}
+html .page-modal .asset-card b,html .personal-modal label,html .suggestion-modal label{font-size:14px}
+html .page-modal .asset-card span,html .personal-modal .personal-page-fields small,html .suggestion-modal .optional{font-size:12px}
+html .page-modal-tabs button{min-height:46px;font-size:14px}
+html .page-modal .primary,html .page-modal .secondary,html .personal-modal .primary,html .personal-modal .secondary,html .suggestion-modal .primary,html .confirm-card .primary,html .confirm-card .secondary,html .support-test-modal .primary{min-height:46px;font-size:14px}
+html .page-modal input,html .page-modal select,html .personal-modal input,html .personal-modal select,html .suggestion-modal input,html .suggestion-modal textarea{min-height:44px;font-size:15px}
+html .page-modal .modal-close,html .personal-modal .modal-close,html .suggestion-modal .modal-close,html .image-editor-modal .modal-close{width:42px;height:42px;font-size:28px}
+html .randomizer-modal h2,html .result-modal h2{font-size:22px}
+html .marker-chip{font-size:12px}
+html .marker-chip b{font-size:16px}
+html .marker-chip small{font-size:11px}
+html .shared-palette-picker-label select{min-height:40px;font-size:13px}
+html .shared-palette-actions .secondary{min-height:44px;font-size:13px}
+html .palette-muted{font-size:12px}
+html .marker-stats-page .marker-card-heading h2{font-size:18px}
+html .marker-stats-page .marker-ranking{gap:13px}
+html .marker-stats-page .marker-ranking-copy b{font-size:13px}
+html .marker-stats-page .marker-ranking-copy small{font-size:11px}
+html .marker-stats-page .marker-usage-copy{font-size:11px}
+html .marker-stats-page .marker-ranking-row>strong{font-size:14px}
+html .marker-stats-page .marker-period-filter{font-size:13px}
+html .marker-stats-page .marker-period-filter select{min-height:42px;font-size:13px}
+html .marker-stats-page .marker-trend-column small{font-size:10px}
+html .marker-stats-page .marker-trend-column b{font-size:12px}
+html .marker-stats-page .marker-settings-card b{font-size:13px}
+html .marker-stats-page .marker-settings-card small{font-size:11px}
+@media(max-width:430px){html .page-modal,html .personal-modal,html .suggestion-modal,html .image-editor-modal,html .randomizer-modal,html .support-test-modal,html .confirm-card{padding:18px 15px;border-radius:20px}html .modal-close{top:10px;right:10px}}
+
+/* A narrow palette header wraps the selector instead of clipping its value. */
+html .shared-palette-head{min-width:0}
+html .shared-palette-picker-label{min-width:0;max-width:100%}
+html .shared-palette-picker-label select{width:100%;max-width:100%;min-width:0}
+@media(max-width:430px){html .shared-palette-head{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:7px}html .shared-palette-picker-label select{min-height:42px}}
+
+/* Saved markers remain a readable, bounded list; each edit opens one focused dialog. */
+html .own-palette-list{display:grid;gap:4px;min-width:0}
+html .own-palette-row{display:grid;grid-template-columns:22px max-content minmax(0,1fr) 34px;align-items:center;column-gap:7px;row-gap:0;min-width:0;padding:6px 7px;border:1px solid #f1dce3;border-radius:10px;background:#fffafd;transition:transform 180ms ease,background-color 180ms ease;touch-action:pan-y;-webkit-user-select:none;user-select:none}
+html .own-palette-row--interactive{cursor:grab}
+html .own-palette-row--interactive:active{background:#fff2f6}
+html .own-palette-row--dragging{transition:none;cursor:grabbing}
+html .own-palette-symbol{grid-column:1;grid-row:1;color:#d4698e;font-size:16px}
+html .own-palette-number{grid-column:2;grid-row:1;color:#704857;font-size:14px}
+html .own-palette-meta{grid-column:2 / span 2;grid-row:2;min-width:0;overflow:hidden;color:#a17f8c;font-size:11px;line-height:1.2;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere}
+html .palette-row-edit{display:grid;place-items:center;flex:none;width:34px;height:34px;padding:0;border:1px solid #efc7d5;border-radius:10px;background:#fff0f5;color:#c85e86;font-size:21px!important;line-height:1}
+html .own-palette-row>.palette-row-edit{grid-column:4;grid-row:1 / span 2;-webkit-tap-highlight-color:transparent}
+html .marker-edit-backdrop{position:fixed;z-index:35;inset:0;display:grid;place-items:center;padding:12px;background:#4e344580;backdrop-filter:blur(3px)}
+html .marker-edit-modal{width:min(430px,100%);max-height:calc(100dvh - 24px);overflow:auto;padding:18px;border:1px solid #f0d7e1;border-radius:20px;background:#fffafd;box-shadow:0 18px 48px #492a3650}
+html .marker-edit-modal h3{margin:0 30px 14px 0;color:#583543;font-size:19px}
+html .marker-edit-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+html .marker-edit-fields label{position:relative;display:grid;gap:5px;min-width:0;color:#805666;font-size:13px;font-weight:800}
+html .marker-edit-fields input,html .marker-edit-fields select{width:100%;min-width:0;min-height:44px;padding:9px 10px;border:1px solid #ecd4de;border-radius:11px;background:#fff;color:#583543;font-size:15px}
+html .marker-edit-fields .marker-edit-usage{grid-column:1 / -1}
+html .marker-edit-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:16px}
+html .marker-edit-actions button{min-height:44px}
+html .delete-marker-action{min-width:0;min-height:44px;padding:8px 10px;border:1px solid #e7aabc;border-radius:11px;background:#fff0f2;color:#a83b58;font-size:14px;font-weight:800;-webkit-tap-highlight-color:transparent}
+html .marker-delete-backdrop{z-index:36}
+html .marker-delete-modal{width:min(360px,100%);padding:18px;border:1px solid #f0d7e1;border-radius:20px;background:#fffafd;box-shadow:0 18px 48px #492a3650;animation:marker-dialog-in 160ms ease-out both}
+html .marker-delete-modal h3{margin:0;color:#583543;font-size:19px}
+html .marker-delete-modal p{margin:9px 0 16px;color:#8e6d7a;font-size:14px;line-height:1.4}
+html .marker-delete-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+html .marker-delete-actions button{min-height:44px}
+@keyframes marker-dialog-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:430px){
+  html .page-modal{padding:16px 10px}
+  html .page-modal .shared-palette-card,html .page-modal .own-palette-summary{padding:8px}
+  html .page-modal .palette-form-head{align-items:stretch;flex-direction:column;gap:8px;margin:10px 0}
+  html .page-modal .palette-form-head>div:first-child{width:100%;min-width:0}
+  html .page-modal .palette-form-actions{width:100%;justify-content:flex-end;flex-wrap:wrap}
+  html .page-modal .palette-form-actions button{min-width:84px;min-height:40px;white-space:nowrap}
+}

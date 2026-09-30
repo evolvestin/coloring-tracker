@@ -378,8 +378,24 @@ class MarkerPaletteItem(TimestampedModel):
             models.UniqueConstraint(fields=('palette', 'marker'), name='unique_palette_marker')
         ]
 
+
+class MarkerStock(TimestampedModel):
+    """A user's current count of each consumable, independent of drawing palettes."""
+
+    user = models.ForeignKey(TrackerUser, on_delete=models.CASCADE, related_name='marker_stock')
+    marker = models.ForeignKey(Marker, on_delete=models.PROTECT, related_name='user_stock')
+    quantity = models.PositiveIntegerField('Количество')
+
+    class Meta:
+        verbose_name = 'Запас маркера'
+        verbose_name_plural = 'Запасы маркеров'
+        ordering = ('marker__manufacturer', 'marker__marker_type', 'marker__number')
+        constraints = [
+            models.UniqueConstraint(fields=('user', 'marker'), name='unique_user_marker_stock')
+        ]
+
     def __str__(self):
-        return f'{self.palette} — {self.marker}'
+        return f'{self.user} — {self.marker}: {self.quantity}'
 
 
 class ColoringSuggestion(TimestampedModel):

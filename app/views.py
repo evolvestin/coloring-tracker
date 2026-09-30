@@ -42,6 +42,7 @@ from app.models import (
     Marker,
     MarkerPalette,
     MarkerPaletteItem,
+    MarkerStock,
     RandomizerRun,
     StarDonation,
     TrackerUser,
@@ -1673,6 +1674,79 @@ def tracker_marker_stats(request):
         'stats': marker_stats_payload(user, period=period, top_limit=top_limit, top_offset=top_offset),
         'usage_weights': MARKER_USAGE_WEIGHTS,
     })
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'PUT'])
+def tracker_marker_stock(request):
+    user = tracker_identity(request)
+    if not user:
+        return JsonResponse({'error': 'Доступно только через Telegram WebApp.'}, status=401)
+    if request.method == 'GET':
+        rows = list(MarkerStock.objects.filter(user=user).select_related('marker'))
+        items = [
+            {**marker_data(row.marker), 'quantity': row.quantity}
+            for row in rows
+        ]
+        return JsonResponse({
+            'items': items,
+            'total_quantity': sum(row.quantity for row in rows),
+            'distinct_markers': len(rows),
+            'manufacturers': [{'value': value, 'label': label} for value, label in MARKER_MANUFACTURERS],
+            'marker_types': [{'value': value, 'label': label} for value, label in MARKER_TYPES],
+        })
+
+    try:
+        with transaction.atomic():
+            TrackerUser.objects.select_for_update().get(pk=user.pk)
+            payload = json.loads(request.body or '{}')
+            if not isinstance(payload, dict):
+                raise ValueError('Ожидается список запасов.')
+            raw_items = payload.get('items')
+            if not isinstance(raw_items, list) or len(raw_items) > 300:
+                raise ValueError('Можно учитывать не больше 300 позиций.')
+            items, seen = [], set()
+            for raw in raw_items:
+                if not isinstance(raw, dict):
+                    raise ValueError('Проверьте список запасов.')
+                quantity = raw.get('quantity')
+                if isinstance(quantity, bool) or not str(quantity).isdigit() or int(quantity) > 100_000:
+                    raise ValueError('Количество должно быть целым числом от 0 до 100 000.')
+                marker_id = raw.get('id') or raw.get('marker_id')
+                if marker_id:
+                    marker = Marker.objects.get(pk=int(marker_id))
+                else:
+                    number = normalize_marker_number(raw.get('number', ''))
+                    symbol = str(raw.get('symbol', '')).strip()
+                    manufacturer = str(raw.get('manufacturer', '')).strip()
+                    marker_type = str(raw.get('marker_type', '')).strip()
+                    if not number or not symbol or len(symbol) > MARKER_SYMBOL_LIMIT:
+                        raise ValueError('Укажите значок и номер маркера.')
+                    if manufacturer not in MARKER_MANUFACTURER_CODES:
+                        raise ValueError('Выберите производителя из списка.')
+                    if marker_type not in MARKER_TYPE_CODES:
+                        raise ValueError('Выберите тип маркера или ручки.')
+                    marker, _ = Marker.objects.get_or_create(
+                        manufacturer=manufacturer,
+                        marker_type=marker_type,
+                        number=number,
+                        defaults={'symbol': symbol, 'created_by': user},
+                    )
+                    if not marker.symbol:
+                        marker.symbol = symbol
+                        marker.save(update_fields=('symbol', 'updated_at'))
+                if marker.id in seen:
+                    raise ValueError('Один маркер нельзя добавить дважды.')
+                seen.add(marker.id)
+                items.append((marker, int(quantity)))
+            MarkerStock.objects.filter(user=user).exclude(marker_id__in=seen).delete()
+            for marker, quantity in items:
+                MarkerStock.objects.update_or_create(
+                    user=user, marker=marker, defaults={'quantity': quantity}
+                )
+    except (json.JSONDecodeError, Marker.DoesNotExist, TypeError, ValueError) as exc:
+        return JsonResponse({'error': str(exc) or 'Не удалось распознать запасы.'}, status=400)
+    return JsonResponse({'saved': len(items)})
 
 
 @require_http_methods(['GET'])

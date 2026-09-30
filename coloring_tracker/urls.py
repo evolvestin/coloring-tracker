@@ -45,6 +45,7 @@ urlpatterns = [
     ),
     path('api/tracker/marker-settings/', views.tracker_marker_settings),
     path('api/tracker/marker-stats/', views.tracker_marker_stats),
+    path('api/tracker/marker-stock/', views.tracker_marker_stock),
     path('api/tracker/report/', views.tracker_month_report),
     path(
         'tracker-preview-app/<int:telegram_id>/',

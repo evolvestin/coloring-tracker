@@ -588,3 +588,42 @@ html .cover-upload-actions .text-action { margin-top: 3px; }
   html .page-builder-index strong { font-size: 29px; }
   html .personal-form-actions { grid-template-columns: 1fr; }
 }
+
+/* Typography and touch targets for the dense personal-book dialog. */
+html .personal-modal .emoji-field > legend,
+html .personal-modal .page-builder > legend { font-size: 14px; }
+html .personal-modal .emoji-field > p,
+html .personal-modal .page-builder > p { font-size: 13px; line-height: 1.45; }
+html .personal-modal .emoji-picker button { min-height: 42px; font-size: 22px; }
+html .personal-modal .page-builder-title { font-size: 14px !important; }
+html .personal-modal .page-builder-title span { font-size: 12px; }
+html .personal-modal .page-builder-row label { font-size: 13px; }
+html .personal-modal .page-builder-number .spread-check { font-size: 13px; }
+html .personal-modal .page-builder-row input { min-height: 42px; font-size: 15px; }
+html .personal-modal .remove-row { width: 34px; height: 34px; font-size: 23px; }
+html .personal-modal .page-builder-actions button,
+html .personal-modal .delete-page-link,
+html .personal-modal .delete-book-link { min-height: 44px; font-size: 14px; }
+html .personal-confirm p { font-size: 15px; line-height: 1.5; }
+html .personal-confirm .confirm-icon { width: 48px; height: 48px; font-size: 23px; }
+html .image-editor-modal label,
+html .image-editor-modal .image-editor-actions button { font-size: 14px; }
+html .image-editor-modal input { min-height: 40px; }
+html .suggestion-modal input::placeholder,
+html .suggestion-modal textarea::placeholder,
+html .personal-modal input::placeholder { font-size: 14px; }
+
+/* Raise the reading floor across the app, including legacy 9–12 px labels. */
+html body #app { font-size: 16px; }
+html body #app :is(p, small, label, time, legend, li, a, .eyebrow, .muted,
+  span:not(.avatar):not(.randomizer-die):not(.result-burst span):not(.support-success-burst span):not(.cover-spark):not(.support-orbit):not(.personal-cover span):not(.personal-create-icon span):not(.cover-placeholder)) {
+  font-size: max(14px, .94em) !important;
+  line-height: 1.4;
+}
+html body #app button:not(.icon-btn):not(.back):not(.modal-close):not(.remove-row):not(.remove-marker-button):not(.mini-switch):not(.emoji-picker button) {
+  font-size: max(14px, .94em) !important;
+  line-height: 1.25;
+}
+html body #app :is(input, select, textarea) { font-size: max(15px, .94em) !important; }
+/* Palette metadata is intentionally secondary to the marker number. */
+html body #app .own-palette-meta { font-size: 12px !important; line-height: 1.2; }
