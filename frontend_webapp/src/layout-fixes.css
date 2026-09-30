@@ -253,7 +253,6 @@ html .book-card strong{position:relative;right:auto;bottom:auto;z-index:1;displa
 
 html .activity-days{display:grid;gap:8px}html .activity-day{padding:0;border:0}html .activity-day>time{display:block;margin:0 0 4px;color:#c7678d;font-size:12px;font-weight:800;line-height:1.35;text-transform:capitalize}.activity-works{display:grid;gap:4px}html .activity-work{grid-template-columns:minmax(0,1fr) auto;padding:8px 10px}html .photo-mark{display:inline-flex;align-items:center;gap:4px;color:#c45f88;font-size:11px;font-weight:800;white-space:nowrap}html .photo-mark svg{width:15px;height:15px;stroke-width:1.8}
 
-html .coloring-page span{right:32px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 html .delete-page-link{display:none}
 html .personal-tools{grid-template-columns:1fr}
 
@@ -281,23 +280,6 @@ html .catalog-page-grid small {
   html .catalog-page-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-/* A tracker card has enough room for a short two-line page title. Reserve
-   space only when the colour-code badge is actually present. */
-html .coloring-page span {
-  right: 7px;
-  display: -webkit-box;
-  max-height: 2.55em;
-  white-space: normal;
-  overflow: hidden;
-  text-overflow: clip;
-  line-height: 1.25;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-html .coloring-page:has(.color-code-mark) span {
-  right: 34px;
 }
 
 /* Personal page list: the count controls the generated rows, so the whole
@@ -616,7 +598,7 @@ html .personal-modal input::placeholder { font-size: 14px; }
 /* Raise the reading floor across the app, including legacy 9–12 px labels. */
 html body #app { font-size: 16px; }
 html body #app :is(p, small, label, time, legend, li, a, .eyebrow, .muted,
-  span:not(.avatar):not(.randomizer-die):not(.result-burst span):not(.support-success-burst span):not(.cover-spark):not(.support-orbit):not(.personal-cover span):not(.personal-create-icon span):not(.cover-placeholder)) {
+  span:not(.avatar):not(.randomizer-die):not(.result-burst span):not(.support-success-burst span):not(.cover-spark):not(.support-orbit):not(.personal-cover span):not(.personal-create-icon span):not(.cover-placeholder)):not(.coloring-page-label small) {
   font-size: max(14px, .94em) !important;
   line-height: 1.4;
 }
@@ -627,3 +609,109 @@ html body #app button:not(.icon-btn):not(.back):not(.modal-close):not(.remove-ro
 html body #app :is(input, select, textarea) { font-size: max(15px, .94em) !important; }
 /* Palette metadata is intentionally secondary to the marker number. */
 html body #app .own-palette-meta { font-size: 12px !important; line-height: 1.2; }
+
+/* Catalog book detail: keep the cover prominent and let the description use
+   the full card width on the narrow WebApp viewport. */
+html body #app .catalog-book-intro {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px;
+}
+html body #app .catalog-book-intro > img,
+html body #app .catalog-book-intro > .cover-placeholder {
+  display: block;
+  width: clamp(150px, 72%, 240px);
+  aspect-ratio: 3 / 4;
+  height: auto;
+  min-height: 0;
+  margin-inline: auto;
+  border-radius: 16px;
+  object-fit: cover;
+}
+html body #app .catalog-book-intro > div {
+  min-width: 0;
+  width: 100%;
+}
+html body #app .catalog-book-intro p {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  overflow-wrap: anywhere;
+}
+html body #app .catalog-book-intro .catalog-publisher {
+  margin-bottom: 6px;
+  color: #704457;
+  font-size: 15px !important;
+}
+html body #app .catalog-book-intro b {
+  font-size: 14px !important;
+}
+
+/* Make tracker pages readable as a compact, responsive three-column list. */
+html body #app .page-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+html body #app .coloring-page {
+  height: clamp(142px, 40vw, 168px);
+  min-width: 0;
+}
+html body #app .coloring-page > img,
+html body #app .coloring-page > .page-empty {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+html body #app .coloring-page-meta {
+  position: absolute;
+  z-index: 1;
+  right: 3px;
+  bottom: 1px;
+  left: 3px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  pointer-events: none;
+}
+html body #app .coloring-page-label {
+  position: static;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+html body #app .coloring-page-label small {
+  display: block;
+  max-width: 100%;
+  color: #35212b;
+  font-size: var(--page-title-size, 8px) !important;
+  font-weight: 650;
+  line-height: 1.12 !important;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-shadow: 0 1px 2px #fff, 1px 0 2px #fff, -1px 0 2px #fff, 0 -1px 2px #fff;
+}
+html body #app .coloring-page-number {
+  position: static;
+  flex: none;
+  padding: 0 2px;
+  background: transparent;
+  color: #c65882;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.05;
+  text-shadow: 0 1px 3px #fff, 0 -1px 3px #fff;
+}
+html body #app .coloring-page.done .coloring-page-label small {
+  color: #35212b;
+}
+html body #app .coloring-page.done .coloring-page-number {
+  background: transparent;
+  color: #c65882;
+}
+@media (min-width: 600px) {
+  html body #app .page-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  html body #app .coloring-page { height: 162px; }
+}
+@media (min-width: 850px) {
+  html body #app .page-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}

@@ -20,10 +20,27 @@ const personalTitle = ref(''), personalEmoji = ref(''), personalPages = ref([])
 const personalEmojis = FLOWER_ICONS
 const uploadVersions = new Map()
 const reportVisibilityStatus = ref('')
+const viewportWidth = ref(window.innerWidth)
 let reportVisibilityStatusTimer
 const pinch = { pointers: new Map(), distance: 0, scale: 1 }
 const pages = computed(() => !data.value ? [] : data.value.pages.filter(page => tab.value === 'all' || (tab.value === 'done' ? page.completed : !page.completed)))
 const isPersonal = computed(() => !!data.value?.book?.is_personal)
+function pageLabelStyle(page) {
+  const titleLength = page.title?.length || 0
+  const numberLength = String(page.label).length
+  const width = viewportWidth.value
+  const columns = width >= 850 ? 5 : width >= 600 ? 4 : 3
+  const pagePadding = width <= 390 ? 14 : 20
+  const cardWidth = (Math.min(width, 650) - pagePadding * 2 - (columns - 1) * 10) / columns
+  const labelWidth = Math.max(20, cardWidth - 8 - numberLength * 12.5)
+  const longestWord = Math.max(1, ...(page.title || '').split(/\s+/).map(word => word.length))
+  const preferredSize = titleLength <= 10 ? 10 : titleLength <= 20 ? 9 : titleLength <= 36 ? 8 : titleLength <= 50 ? 7 : 6
+  const wordFitSize = labelWidth / (longestWord * 0.62)
+  const fontSize = Math.max(5.5, Math.min(preferredSize, wordFitSize))
+  return {
+    '--page-title-size': `${fontSize}px`,
+  }
+}
 
 async function load() {
   data.value = await api(`/api/tracker/books/${route.params.id}/`)
@@ -279,8 +296,15 @@ async function deletePersonalBook() {
     personalError.value = error.message
   } finally { personalBusy.value = false }
 }
-onBeforeUnmount(() => clearTimeout(reportVisibilityStatusTimer))
-onMounted(load)
+function updateViewportWidth() { viewportWidth.value = window.innerWidth }
+onBeforeUnmount(() => {
+  clearTimeout(reportVisibilityStatusTimer)
+  window.removeEventListener('resize', updateViewportWidth)
+})
+onMounted(() => {
+  window.addEventListener('resize', updateViewportWidth, { passive: true })
+  load()
+})
 </script>
 
 <template>
@@ -294,7 +318,7 @@ onMounted(load)
     <input ref="workInput" hidden type="file" accept="image/*" @change="openEditor($event, 'photo')">
     <input ref="colorCodeInput" hidden type="file" accept="image/*" @change="openEditor($event, 'color_code')">
     <p v-if="uploadError" class="upload-error" role="alert">{{ uploadError }}</p>
-    <transition-group name="pages" tag="div" class="page-grid"><article v-for="page in pages" :key="page.id" :class="['coloring-page', { done: page.completed, spread: page.spread_end }]" @click="openPage(page)"><img v-if="page.photo" :src="page.photo" :alt="'Работа ' + page.label" @error="imageFailed"><div v-else class="page-empty"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg></div><span>{{ page.label }}<template v-if="page.title"> · {{ page.title }}</template></span><i v-if="page.color_code" class="color-code-mark" aria-label="Цветовой код загружен"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.8a8.2 8.2 0 1 0 0 16.4h1.2a1.8 1.8 0 0 0 0-3.6h-.6a1.8 1.8 0 0 1 0-3.6h1.2a8.2 8.2 0 0 0 0-16.4Z"/><circle cx="7.7" cy="10.2" r=".8" fill="currentColor"/><circle cx="11" cy="7.2" r=".8" fill="currentColor"/><circle cx="15.4" cy="8.7" r=".8" fill="currentColor"/></svg></i><button class="check" :aria-label="page.completed ? 'Удалить работу' : 'Отметить готовой'" @click.stop="toggle(page)"><svg v-if="page.completed" viewBox="0 0 24 24" fill="none"><path d="m5 12 4.2 4.2L19 6.5"/></svg><svg v-else viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7"/></svg></button></article></transition-group>
+    <transition-group name="pages" tag="div" class="page-grid"><article v-for="page in pages" :key="page.id" :class="['coloring-page', { done: page.completed, spread: page.spread_end }]" @click="openPage(page)"><img v-if="page.photo" :src="page.photo" :alt="'Работа ' + page.label" @error="imageFailed"><div v-else class="page-empty"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg></div><div class="coloring-page-meta" :style="pageLabelStyle(page)"><strong class="coloring-page-number">{{ page.label }}</strong><div v-if="page.title" class="coloring-page-label"><small>{{ page.title }}</small></div></div><i v-if="page.color_code" class="color-code-mark" aria-label="Цветовой код загружен"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.8a8.2 8.2 0 1 0 0 16.4h1.2a1.8 1.8 0 0 0 0-3.6h-.6a1.8 1.8 0 0 1 0-3.6h1.2a8.2 8.2 0 0 0 0-16.4Z"/><circle cx="7.7" cy="10.2" r=".8" fill="currentColor"/><circle cx="11" cy="7.2" r=".8" fill="currentColor"/><circle cx="15.4" cy="8.7" r=".8" fill="currentColor"/></svg></i><button class="check" :aria-label="page.completed ? 'Удалить работу' : 'Отметить готовой'" @click.stop="toggle(page)"><svg v-if="page.completed" viewBox="0 0 24 24" fill="none"><path d="m5 12 4.2 4.2L19 6.5"/></svg><svg v-else viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7"/></svg></button></article></transition-group>
     <transition name="modal"><div v-if="activePage" class="modal-backdrop" @click.self="activePage = null"><section class="page-modal" role="dialog" aria-modal="true" :aria-labelledby="`page-title-${activePage.id}`"><button class="modal-close" aria-label="Закрыть" @click="activePage = null">×</button><p class="eyebrow">СТРАНИЦА {{ activePage.label }}<template v-if="activePage.title"> · {{ activePage.title }}</template></p><h2 :id="`page-title-${activePage.id}`">{{ activePage.title || 'Работа и цветовой код' }}</h2>
       <div class="page-modal-tabs" role="tablist" aria-label="Разделы работы"><button type="button" role="tab" :aria-selected="pageModalTab === 'work'" :class="{ active: pageModalTab === 'work' }" @click="pageModalTab = 'work'">Работа</button><button type="button" role="tab" :aria-selected="pageModalTab === 'markers'" :class="{ active: pageModalTab === 'markers' }" @click="pageModalTab = 'markers'">Маркеры</button></div>
       <p class="modal-hint">{{ pageModalTab === 'work' ? 'Фото и цветовой код сохраняются отдельно от отметки о готовности.' : 'Добавьте цвета, которые использовали в этой работе.' }}</p>
