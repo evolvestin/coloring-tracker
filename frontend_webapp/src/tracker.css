@@ -174,3 +174,14 @@ html .page-modal-tabs button.active{background:#fff;color:#d05e88;box-shadow:0 4
 html .page-modal-panel{min-width:0}
 html .page-modal-marker-panel{padding-top:1px}
 @media(max-width:390px){html .page-modal-tabs{margin-top:11px}.page-modal-tabs button{font-size:11px}}
+
+/* Crop handles need a forgiving touch target, even when the visible knob is small. */
+html .crop-handle{width:44px;height:44px;border:0;border-radius:50%;background:transparent;box-shadow:none;touch-action:none}
+html .crop-handle::after{content:"";position:absolute;inset:12px;border:3px solid #fff;border-radius:5px;background:#d86792;box-shadow:0 2px 5px #32152280;pointer-events:none}
+html .crop-handle-nw{left:-22px;top:-22px}
+html .crop-handle-ne{right:-22px;top:-22px}
+html .crop-handle-sw{left:-22px;bottom:-22px}
+html .crop-handle-se{right:-22px;bottom:-22px}
+html .image-editor-backdrop{overscroll-behavior:contain}
+html .image-editor-modal{max-height:calc(100dvh - 24px);overscroll-behavior:contain;touch-action:pan-y}
+html .image-editor-stage{touch-action:none;overscroll-behavior:contain}

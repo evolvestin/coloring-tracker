@@ -22,6 +22,10 @@ const saving = ref(false)
 const drag = ref(null)
 let resizeObserver
 let interactiveAfter = 0
+let previousBodyStyles
+let previousHtmlOverflow
+let pageScrollY = 0
+let restoreTelegramSwipes = false
 
 function rotatedSize() {
   const quarterTurn = rotation.value % 180 !== 0
@@ -32,7 +36,7 @@ function rotatedSize() {
 
 function resetCrop() {
   const size = rotatedSize()
-  const margin = 0.06
+  const margin = 0
   let width = size.width * (1 - margin * 2)
   let height = size.height * (1 - margin * 2)
   if (props.aspectRatio > 0) {
@@ -218,12 +222,48 @@ image.onload = onImageLoad
 image.src = imageSrc
 onMounted(() => {
   interactiveAfter = Date.now() + 350
+  pageScrollY = window.scrollY
+  previousBodyStyles = {
+    position: document.body.style.position,
+    top: document.body.style.top,
+    width: document.body.style.width,
+    overflow: document.body.style.overflow,
+  }
+  previousHtmlOverflow = document.documentElement.style.overflow
+  document.documentElement.style.overflow = 'hidden'
+  Object.assign(document.body.style, {
+    position: 'fixed',
+    top: `-${pageScrollY}px`,
+    width: '100%',
+    overflow: 'hidden',
+  })
+
+  const webApp = window.Telegram?.WebApp
+  if (webApp?.isVerticalSwipesEnabled !== false && typeof webApp?.disableVerticalSwipes === 'function') {
+    try {
+      webApp.disableVerticalSwipes()
+      restoreTelegramSwipes = true
+    } catch {
+      restoreTelegramSwipes = false
+    }
+  }
+
   resizeObserver = new ResizeObserver(drawPreview)
   resizeObserver.observe(stage.value)
 })
 watch(rotation, drawPreview)
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  if (previousBodyStyles) Object.assign(document.body.style, previousBodyStyles)
+  if (previousHtmlOverflow !== undefined) document.documentElement.style.overflow = previousHtmlOverflow
+  window.scrollTo(0, pageScrollY)
+  if (restoreTelegramSwipes) {
+    try {
+      window.Telegram?.WebApp?.enableVerticalSwipes?.()
+    } catch {
+      // Older Telegram clients may expose the method without supporting it.
+    }
+  }
   URL.revokeObjectURL(imageSrc)
 })
 </script>
