@@ -17,7 +17,6 @@ const rotation = ref(0)
 const zoom = ref(1)
 const crop = ref({ x: 0, y: 0, width: 0, height: 0 })
 const display = ref({ left: 0, top: 0, width: 0, height: 0, scale: 1 })
-const stageSize = ref({ width: 0, height: 0 })
 const saving = ref(false)
 const drag = ref(null)
 let resizeObserver
@@ -54,15 +53,18 @@ function resetCrop() {
 function drawPreview() {
   if (!loaded.value || !stage.value || !canvas.value) return
   const size = rotatedSize()
-  const bounds = stage.value.getBoundingClientRect()
-  stageSize.value = { width: bounds.width, height: bounds.height }
-  const baseScale = Math.min((bounds.width - 24) / size.width, (bounds.height - 24) / size.height)
+  // Use layout dimensions here, not getBoundingClientRect(): the latter
+  // includes the modal's entrance scale transform. Mixing transformed bounds
+  // with untransformed CSS offsets makes the image and crop jump on first drag.
+  const widthInLayout = stage.value.clientWidth
+  const heightInLayout = stage.value.clientHeight
+  const baseScale = Math.min((widthInLayout - 24) / size.width, (heightInLayout - 24) / size.height)
   const scale = baseScale * zoom.value
   const width = size.width * scale
   const height = size.height * scale
   display.value = {
-    left: (bounds.width - width) / 2,
-    top: (bounds.height - height) / 2,
+    left: (widthInLayout - width) / 2,
+    top: (heightInLayout - height) / 2,
     width,
     height,
     scale,
@@ -93,9 +95,13 @@ function clamp(value, min, max) { return Math.min(max, Math.max(min, value)) }
 function imagePoint(event) {
   const rect = stage.value.getBoundingClientRect()
   const d = display.value
+  // Pointer coordinates are viewport pixels, while display values are in the
+  // stage's layout pixels. Convert explicitly in case an ancestor is scaled.
+  const localX = (event.clientX - rect.left) * (stage.value.clientWidth / rect.width)
+  const localY = (event.clientY - rect.top) * (stage.value.clientHeight / rect.height)
   return {
-    x: clamp((event.clientX - rect.left - d.left) / d.scale, 0, rotatedSize().width),
-    y: clamp((event.clientY - rect.top - d.top) / d.scale, 0, rotatedSize().height),
+    x: clamp((localX - d.left) / d.scale, 0, rotatedSize().width),
+    y: clamp((localY - d.top) / d.scale, 0, rotatedSize().height),
   }
 }
 
