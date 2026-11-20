@@ -25,4 +25,4 @@ COPY --from=frontend /build/dist ./frontend_webapp/dist
 RUN mkdir -p /app/data /var/lib/coloring-tracker/telegram-backups \
     && chown -R app:app /app /var/lib/coloring-tracker
 USER app
-CMD ["gunicorn", "coloring_tracker.wsgi:application", "--bind", "0.0.0.0:8000", "--worker-class", "gthread", "--workers", "2", "--threads", "4", "--timeout", "60", "--keep-alive", "5"]
+CMD ["gunicorn", "coloring_tracker.wsgi:application", "--bind", "0.0.0.0:8000", "--worker-class", "sync", "--workers", "4", "--timeout", "60", "--max-requests", "1500", "--max-requests-jitter", "150"]

@@ -3,7 +3,7 @@ django-vite==3.0.4
 python-dotenv>=1.0
 psycopg[binary]>=3.2
 Pillow>=10.0
-gunicorn>=23.0
+gunicorn==27.0.1
 whitenoise>=6.8
 celery>=5.5
 redis>=5.0
